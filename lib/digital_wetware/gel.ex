@@ -65,6 +65,11 @@ defmodule DigitalWetware.Gel do
     GenServer.call(__MODULE__, :step_count)
   end
 
+  @doc "Set step count (for restoring state)."
+  def set_step_count(n) when is_integer(n) and n >= 0 do
+    GenServer.call(__MODULE__, {:set_step_count, n})
+  end
+
   @doc "Get the params."
   def params do
     GenServer.call(__MODULE__, :params)
@@ -185,6 +190,10 @@ defmodule DigitalWetware.Gel do
 
   def handle_call(:step_count, _from, state) do
     {:reply, state.step_count, state}
+  end
+
+  def handle_call({:set_step_count, n}, _from, state) do
+    {:reply, :ok, %{state | step_count: n}}
   end
 
   def handle_call(:params, _from, state) do

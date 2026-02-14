@@ -85,6 +85,9 @@ defmodule DigitalWetware.Persistence do
       end)
       |> Map.new()
 
+    # Export co-activation associations
+    assoc_data = DigitalWetware.Associations.export()
+
     state = %{
       version: "elixir-v2",
       step_count: step_count,
@@ -106,6 +109,7 @@ defmodule DigitalWetware.Persistence do
       weights: weights,
       crystallized: crystallized,
       concepts: concepts,
+      associations: assoc_data,
       saved_at: DateTime.utc_now() |> DateTime.to_iso8601()
     }
 
@@ -168,7 +172,16 @@ defmodule DigitalWetware.Persistence do
         end
 
       restored = length(count)
-      IO.puts("   ✓ Restored #{restored} cells from #{state["version"] || "unknown"} (step #{state["step_count"]})")
+      step_count = state["step_count"] || 0
+      Gel.set_step_count(step_count)
+
+      # Restore co-activation associations
+      case state["associations"] do
+        nil -> :ok
+        assoc_data -> DigitalWetware.Associations.import(assoc_data)
+      end
+
+      IO.puts("   ✓ Restored #{restored} cells from #{state["version"] || "unknown"} (step #{step_count})")
       :ok
     end
   end

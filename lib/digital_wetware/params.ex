@@ -8,12 +8,12 @@ defmodule DigitalWetware.Params do
   defstruct [
     width: 80,
     height: 80,
-    propagation_rate: 0.12,
-    charge_decay: 0.05,
+    propagation_rate: 0.12,          # original — balanced
+    charge_decay: 0.06,             # moderate dissipation
     activation_threshold: 0.1,
-    learning_rate: 0.02,
-    decay_rate: 0.005,
-    crystal_threshold: 0.7,
+    learning_rate: 0.015,           # slow wiring — must be earned
+    decay_rate: 0.007,              # connections fade moderately
+    crystal_threshold: 0.80,        # meaningful but achievable
     crystal_decay_factor: 0.05,
     w_init: 0.1,
     w_min: 0.01,

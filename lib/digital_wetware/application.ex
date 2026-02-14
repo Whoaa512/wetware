@@ -24,7 +24,10 @@ defmodule DigitalWetware.Application do
       {DynamicSupervisor, name: DigitalWetware.ConceptSupervisor, strategy: :one_for_one},
 
       # Gel manager
-      DigitalWetware.Gel
+      DigitalWetware.Gel,
+
+      # Co-activation association tracker
+      DigitalWetware.Associations
     ]
 
     opts = [strategy: :one_for_one, name: DigitalWetware.Supervisor]

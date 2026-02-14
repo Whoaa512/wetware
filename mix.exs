@@ -8,7 +8,8 @@ defmodule DigitalWetware.MixProject do
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      aliases: aliases()
+      aliases: aliases(),
+      escript: [main_module: DigitalWetware.CLI]
     ]
   end
 
