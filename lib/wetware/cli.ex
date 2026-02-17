@@ -11,6 +11,9 @@ defmodule Wetware.CLI do
 
     # Handle init before full boot — it scaffolds the data dir
     case argv do
+      ["init", "--force" | _] ->
+        cmd_init(force: true)
+
       ["init" | _] ->
         cmd_init()
 
@@ -44,13 +47,28 @@ defmodule Wetware.CLI do
     end
   end
 
-  defp cmd_init do
+  defp cmd_init(opts \\ []) do
+    force = Keyword.get(opts, :force, false)
     data_dir = DataPaths.data_dir()
     concepts_path = DataPaths.concepts_path()
 
     already_exists = File.exists?(concepts_path)
 
+    gel_exists = File.exists?(DataPaths.gel_state_path())
+
     cond do
+      force ->
+        # Force overwrite with starters
+        File.mkdir_p!(data_dir)
+        File.write!(concepts_path, @default_concepts)
+
+        concept_count = count_concepts(concepts_path)
+
+        IO.puts("")
+        IO.puts("#{IO.ANSI.green()}🧬 Wetware re-initialized with starter concepts#{IO.ANSI.reset()}")
+        IO.puts("  Concepts: #{concept_count}")
+        IO.puts("")
+
       already_exists and has_concepts?(concepts_path) ->
         IO.puts("")
         IO.puts("#{IO.ANSI.green()}✓ Wetware is already initialized#{IO.ANSI.reset()}")
@@ -59,7 +77,7 @@ defmodule Wetware.CLI do
         concept_count = count_concepts(concepts_path)
         IO.puts("  Concepts: #{concept_count}")
 
-        if File.exists?(DataPaths.gel_state_path()) do
+        if gel_exists do
           IO.puts("  Gel state: saved")
         else
           IO.puts("  Gel state: not yet (run #{IO.ANSI.cyan()}wetware imprint#{IO.ANSI.reset()} to start)")
@@ -67,6 +85,22 @@ defmodule Wetware.CLI do
 
         IO.puts("")
         IO.puts("  Run #{IO.ANSI.cyan()}wetware status#{IO.ANSI.reset()} for full details.")
+        IO.puts("")
+
+      already_exists and gel_exists and not has_concepts?(concepts_path) ->
+        # concepts.json exists but is empty, while gel state exists — something went wrong
+        IO.puts("")
+        IO.puts("#{IO.ANSI.yellow()}⚠ Concepts file is empty but gel state exists#{IO.ANSI.reset()}")
+        IO.puts("  Data dir: #{data_dir}")
+        IO.puts("")
+        IO.puts("  This usually means concepts were cleared accidentally.")
+        IO.puts("  Your gel state (#{DataPaths.gel_state_path()}) is intact.")
+        IO.puts("")
+        IO.puts("  To restore, copy your concepts back into:")
+        IO.puts("    #{concepts_path}")
+        IO.puts("")
+        IO.puts("  Or to start fresh with starter concepts, run:")
+        IO.puts("    #{IO.ANSI.cyan()}wetware init --force#{IO.ANSI.reset()}")
         IO.puts("")
 
       true ->
