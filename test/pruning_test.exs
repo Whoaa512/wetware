@@ -87,7 +87,7 @@ defmodule Wetware.PruningTest do
   defp seed_concepts(tmp_dir) do
     concepts = %{
       "concepts" => %{
-        "seed" => %{"cx" => 5, "cy" => 5, "r" => 3, "tags" => ["seed"]}
+        "seed" => %{"tags" => ["seed"]}
       }
     }
 

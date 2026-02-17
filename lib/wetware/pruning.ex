@@ -62,26 +62,13 @@ defmodule Wetware.Pruning do
   end
 
   defp crystallized_concept?(name) do
-    info = Concept.info(name)
-
-    cells_in_region(info)
+    Wetware.Gel.concept_cells(name)
     |> Enum.any?(fn {x, y} ->
       state = Cell.get_state({x, y})
 
       state.neighbors
       |> Enum.any?(fn {_offset, data} -> Map.get(data, :crystallized, false) end)
     end)
-  end
-
-  defp cells_in_region(%{cx: cx, cy: cy, r: r}) do
-    p = Wetware.Params.default()
-    r2 = r * r
-
-    for y <- max(0, cy - r)..min(p.height - 1, cy + r),
-        x <- max(0, cx - r)..min(p.width - 1, cx + r),
-        (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2 do
-      {x, y}
-    end
   end
 
   defp load_history do

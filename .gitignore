@@ -24,4 +24,5 @@ digital_wetware-*.tar
 
 # Compiled escript binary
 /digital_wetware
+/wetware
 

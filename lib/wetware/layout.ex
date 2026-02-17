@@ -1,77 +1,60 @@
 defmodule Wetware.Layout do
-  @moduledoc "Spatial placement for concept regions on the 80x80 gel."
+  @moduledoc """
+  Compatibility wrapper around the v3 layout engine/strategy modules.
 
-  @grid_w 80
-  @grid_h 80
+  New callers should use `Wetware.Layout.Engine` and `Wetware.Layout.Strategy`.
+  """
+
   @default_r 3
-  @default_gap 2
-  @search_radius 30
-
-  @type concept_like :: %{
-          required(:cx) => integer(),
-          required(:cy) => integer(),
-          optional(:r) => integer()
-        }
 
   def find_position(anchor_concept, concepts) do
-    anchor_r = Map.get(anchor_concept, :r, @default_r)
-    target_r = @default_r
+    existing =
+      concepts
+      |> Enum.map(fn c ->
+        {Map.fetch!(c, :name),
+         %{
+           center: {Map.fetch!(c, :cx), Map.fetch!(c, :cy)},
+           r: Map.get(c, :r, @default_r),
+           tags: Map.get(c, :tags, [])
+         }}
+      end)
+      |> Map.new()
 
-    candidates =
-      for radius <- 1..@search_radius,
-          dy <- -radius..radius,
-          dx <- -radius..radius,
-          max(abs(dx), abs(dy)) == radius,
-          x = Map.fetch!(anchor_concept, :cx) + dx,
-          y = Map.fetch!(anchor_concept, :cy) + dy,
-          in_bounds?({x, y}, target_r),
-          do:
-            {x, y,
-             distance({Map.fetch!(anchor_concept, :cx), Map.fetch!(anchor_concept, :cy)}, {x, y}),
-             anchor_r}
-
-    case Enum.sort_by(candidates, fn {_x, _y, dist, _anchor_r} -> dist end)
-         |> Enum.find(fn {x, y, _dist, _anchor_r} ->
-           is_empty_spot({x, y}, concepts, r: target_r)
-         end) do
-      {x, y, _dist, _anchor_r} -> {x, y}
-      nil -> find_position_default(concepts, r: target_r)
-    end
+    name = Map.get(anchor_concept, :name, "candidate")
+    tags = Map.get(anchor_concept, :tags, [])
+    Wetware.Layout.Engine.place(name, tags, existing)
   end
 
   def find_position_default(concepts, opts \\ []) do
-    r = Keyword.get(opts, :r, @default_r)
+    tags = Keyword.get(opts, :tags, [])
 
-    for y <- r..(@grid_h - r - 1),
-        x <- r..(@grid_w - r - 1),
-        is_empty_spot({x, y}, concepts, r: r) do
-      {x, y}
-    end
-    |> List.first()
-    |> case do
-      nil -> nil
-      pos -> pos
-    end
-  end
-
-  def is_empty_spot(pos, concepts, opts \\ []) do
-    {x, y} = normalize_pos(pos)
-    r = Keyword.get(opts, :r, @default_r)
-    gap = Keyword.get(opts, :gap, @default_gap)
-
-    in_bounds?({x, y}, r) and
-      Enum.all?(concepts, fn concept ->
-        cr = Map.get(concept, :r, @default_r)
-        min_center_dist = r + cr + gap
-        distance({x, y}, {Map.fetch!(concept, :cx), Map.fetch!(concept, :cy)}) > min_center_dist
+    existing =
+      concepts
+      |> Enum.with_index()
+      |> Enum.map(fn {c, idx} ->
+        {"c#{idx}",
+         %{
+           center: {Map.fetch!(c, :cx), Map.fetch!(c, :cy)},
+           r: Map.get(c, :r, @default_r),
+           tags: Map.get(c, :tags, [])
+         }}
       end)
+      |> Map.new()
+
+    Wetware.Layout.Proximity.place("candidate", tags, existing)
   end
 
-  defp normalize_pos({x, y}), do: {x, y}
-  defp normalize_pos(%{x: x, y: y}), do: {x, y}
+  def is_empty_spot({x, y}, concepts, opts \\ []) do
+    r = Keyword.get(opts, :r, @default_r)
+    gap = Keyword.get(opts, :gap, 2)
 
-  defp in_bounds?({x, y}, r) do
-    x - r >= 0 and y - r >= 0 and x + r < @grid_w and y + r < @grid_h
+    concepts
+    |> Enum.reject(&(&1[:cx] == x and &1[:cy] == y))
+    |> Enum.all?(fn concept ->
+      cr = Map.get(concept, :r, @default_r)
+      min_center_dist = r + cr + gap
+      distance({x, y}, {Map.fetch!(concept, :cx), Map.fetch!(concept, :cy)}) > min_center_dist
+    end)
   end
 
   defp distance({ax, ay}, {bx, by}) do

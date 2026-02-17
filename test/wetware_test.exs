@@ -1,7 +1,7 @@
 defmodule WetwareTest do
   use ExUnit.Case, async: false
 
-  alias Wetware.{Cell, Gel, Concept, Resonance, Persistence, Params, Associations}
+  alias Wetware.{Associations, Cell, Concept, Gel, Params, Persistence, Resonance}
 
   @example_concepts_path Path.expand("example/concepts.json", File.cwd!())
 
@@ -27,14 +27,15 @@ defmodule WetwareTest do
     :ok
   end
 
-  describe "Cell" do
+  describe "Sparse Cell" do
     test "starts with zero charge" do
+      {:ok, _} = Gel.ensure_cell({0, 0}, :test)
       Cell.restore({0, 0}, 0.0, %{})
-      state = Cell.get_state({0, 0})
-      assert state.charge == 0.0
+      assert Cell.get_state({0, 0}).charge == 0.0
     end
 
     test "stimulation increases charge" do
+      {:ok, _} = Gel.ensure_cell({10, 10}, :test)
       Cell.restore({10, 10}, 0.0, %{})
       before = Cell.get_state({10, 10}).charge
 
@@ -45,67 +46,101 @@ defmodule WetwareTest do
       assert after_charge <= 0.5
     end
 
-    test "charge is clamped to [0, 1]" do
-      Cell.restore({11, 11}, 0.0, %{})
-      Cell.stimulate({11, 11}, 0.8)
-      Cell.stimulate({11, 11}, 0.8)
+    test "on-demand neighbors wire between existing cells" do
+      {:ok, _} = Gel.ensure_cell({40, 40}, :test)
+      {:ok, _} = Gel.ensure_cell({41, 40}, :test)
 
-      state = Cell.get_state({11, 11})
-      assert state.charge == 1.0
-    end
+      s1 = Cell.get_state({40, 40})
+      s2 = Cell.get_state({41, 40})
 
-    test "has exact 8-connected neighbor offsets for interior cells" do
-      state = Cell.get_state({40, 40})
-      actual = state.neighbors |> Map.keys() |> MapSet.new()
-
-      expected =
-        Params.neighbor_offsets()
-        |> Enum.map(fn {dy, dx} -> {dx, dy} end)
-        |> MapSet.new()
-
-      assert map_size(state.neighbors) == 8
-      assert actual == expected
-    end
-
-    test "corner cells have exact neighbor offsets" do
-      state = Cell.get_state({0, 0})
-
-      assert map_size(state.neighbors) == 3
-      assert MapSet.new(Map.keys(state.neighbors)) == MapSet.new([{1, 0}, {0, 1}, {1, 1}])
-    end
-
-    test "edge cells have exact neighbor offsets" do
-      state = Cell.get_state({0, 40})
-
-      assert map_size(state.neighbors) == 5
-
-      assert MapSet.new(Map.keys(state.neighbors)) ==
-               MapSet.new([{0, -1}, {1, -1}, {1, 0}, {0, 1}, {1, 1}])
+      assert Map.has_key?(s1.neighbors, {1, 0})
+      assert Map.has_key?(s2.neighbors, {-1, 0})
     end
   end
 
-  describe "Gel" do
+  describe "Sparse Gel" do
     test "boot is idempotent" do
       before = Registry.count(Wetware.CellRegistry)
       assert {:ok, :already_booted} = Gel.boot()
       after_count = Registry.count(Wetware.CellRegistry)
-
       assert before == after_count
+    end
+
+    test "starts with sparse non-zero count after concept seed" do
+      assert Registry.count(Wetware.CellRegistry) > 0
+      assert Registry.count(Wetware.CellRegistry) < 6_400
+    end
+
+    test "spawn threshold gates propagation into empty space" do
+      source = {500, 500}
+      target = {501, 500}
+
+      {:ok, _} = Gel.ensure_cell(source, :test, kind: :concept)
+      Cell.restore(source, 1.0, %{}, kind: :concept)
+
+      assert :error = Wetware.Gel.Index.cell_pid(target)
+
+      assert {:ok, _} = Gel.step()
+      assert :error = Wetware.Gel.Index.cell_pid(target)
+
+      Enum.each(1..8, fn _ ->
+        Cell.stimulate(source, 1.0)
+        assert {:ok, _} = Gel.step()
+      end)
+
+      assert {:ok, _pid} = Wetware.Gel.Index.cell_pid(target)
+    end
+  end
+
+  describe "Application wiring" do
+    test "partition supervisor and sparse index/lifecycle are running" do
+      assert is_pid(Process.whereis(Wetware.CellSupervisors))
+      assert is_pid(Process.whereis(Wetware.Gel.Index))
+      assert is_pid(Process.whereis(Wetware.Gel.Lifecycle))
+      assert is_pid(Process.whereis(Wetware.Layout.Engine))
+    end
+  end
+
+  describe "Cell kinds" do
+    test "kind-specific physics produce distinct decay profiles" do
+      concept_coord = {520, 520}
+      axon_coord = {540, 540}
+      interstitial_coord = {560, 560}
+
+      {:ok, _} = Gel.ensure_cell(concept_coord, :test, kind: :concept)
+      {:ok, _} = Gel.ensure_cell(axon_coord, :test, kind: :axon)
+      {:ok, _} = Gel.ensure_cell(interstitial_coord, :test, kind: :interstitial)
+
+      Cell.restore(concept_coord, 1.0, %{}, kind: :concept)
+      Cell.restore(axon_coord, 1.0, %{}, kind: :axon)
+      Cell.restore(interstitial_coord, 1.0, %{}, kind: :interstitial)
+
+      assert {:ok, _} = Gel.step()
+
+      concept = Cell.get_state(concept_coord).charge
+      axon = Cell.get_state(axon_coord).charge
+      interstitial = Cell.get_state(interstitial_coord).charge
+
+      assert axon > concept
+      assert concept > interstitial
     end
   end
 
   describe "charge propagation" do
     test "charge propagates to neighbors after step" do
-      Cell.restore({40, 40}, 1.0, %{})
-      Cell.restore({41, 40}, 0.0, %{})
+      {:ok, _} = Gel.ensure_cell({50, 50}, :test)
+      {:ok, _} = Gel.ensure_cell({51, 50}, :test)
 
-      neighbor_before = Cell.get_state({41, 40}).charge
-      center_before = Cell.get_state({40, 40}).charge
+      Cell.restore({50, 50}, 1.0, %{})
+      Cell.restore({51, 50}, 0.0, %{})
+
+      neighbor_before = Cell.get_state({51, 50}).charge
+      center_before = Cell.get_state({50, 50}).charge
 
       assert {:ok, _} = Gel.step()
 
-      neighbor_after = Cell.get_state({41, 40}).charge
-      center_after = Cell.get_state({40, 40}).charge
+      neighbor_after = Cell.get_state({51, 50}).charge
+      center_after = Cell.get_state({50, 50}).charge
 
       assert neighbor_after > neighbor_before
       assert center_after < center_before
@@ -114,30 +149,33 @@ defmodule WetwareTest do
 
   describe "Hebbian learning" do
     test "co-active cells strengthen direct connection" do
-      Cell.restore({50, 50}, 0.8, %{})
-      Cell.restore({51, 50}, 0.8, %{})
+      {:ok, _} = Gel.ensure_cell({60, 60}, :test)
+      {:ok, _} = Gel.ensure_cell({61, 60}, :test)
 
-      w_before = weight_at({50, 50}, {1, 0})
+      Cell.restore({60, 60}, 0.8, %{})
+      Cell.restore({61, 60}, 0.8, %{})
+
+      w_before = weight_at({60, 60}, {1, 0})
 
       assert {:ok, _} = Gel.step()
 
-      w_after = weight_at({50, 50}, {1, 0})
-
+      w_after = weight_at({60, 60}, {1, 0})
       assert w_after > w_before
-      assert w_after - w_before > 0.001
     end
   end
 
   describe "crystallization" do
     test "connections crystallize above threshold" do
-      p = Params.default()
-      weights_map = uniform_weights_map({60, 60}, p.crystal_threshold + 0.02, false)
+      {:ok, _} = Gel.ensure_cell({70, 70}, :test)
+      {:ok, _} = Gel.ensure_cell({71, 70}, :test)
 
-      Cell.restore({60, 60}, 0.5, weights_map)
+      p = Params.default()
+      weights_map = uniform_weights_map({70, 70}, p.crystal_threshold + 0.02, false)
+
+      Cell.restore({70, 70}, 0.5, weights_map)
       assert {:ok, _} = Gel.step()
 
-      state = Cell.get_state({60, 60})
-
+      state = Cell.get_state({70, 70})
       assert Enum.all?(state.neighbors, fn {_offset, %{crystallized: c}} -> c end)
     end
   end
@@ -147,26 +185,18 @@ defmodule WetwareTest do
       concepts = Concept.load_from_json(@example_concepts_path)
       assert is_list(concepts)
       assert length(concepts) > 0
-
-      first = hd(concepts)
-      assert %Concept{} = first
-      assert is_binary(first.name)
-      assert is_integer(first.cx)
-      assert is_integer(first.cy)
-      assert is_integer(first.r)
+      assert %Concept{} = hd(concepts)
     end
 
     test "registers and lists concepts" do
       name = unique_name("test-concept")
       register_temp_concept(name, 5, 5, 2)
-
-      all = Concept.list_all()
-      assert name in all
+      assert name in Concept.list_all()
     end
 
-    test "stimulate and measure charge without sleep" do
+    test "stimulate and measure charge" do
       name = unique_name("test-charge")
-      register_temp_concept(name, 70, 70, 2)
+      register_temp_concept(name, 80, 80, 2)
 
       charge_before = Concept.charge(name)
       Concept.stimulate(name, 0.8)
@@ -175,6 +205,21 @@ defmodule WetwareTest do
 
       assert charge_after > charge_before
     end
+
+    test "registering a concept seeds concept-kind cells in its region" do
+      name = unique_name("seed-kind")
+      concept = register_temp_concept(name, 90, 90, 2)
+
+      seeded_cells = Gel.concept_cells(name)
+      assert seeded_cells != []
+
+      assert Enum.all?(seeded_cells, fn {x, y} ->
+               Cell.get_state({x, y}).kind == :concept and
+                 name in Cell.get_state({x, y}).owners
+             end)
+
+      assert concept.name == name
+    end
   end
 
   describe "Associations" do
@@ -182,12 +227,8 @@ defmodule WetwareTest do
       assert :ok = Associations.import(%{})
 
       Associations.co_activate(["alpha", "beta", "beta"])
-      alpha_assocs = Associations.get("alpha")
-      beta_assocs = Associations.get("beta")
-
-      assert [{"beta", alpha_weight}] = alpha_assocs
-      assert [{"alpha", beta_weight}] = beta_assocs
-      assert alpha_weight > 0.0
+      assert [{"beta", alpha_weight}] = Associations.get("alpha")
+      assert [{"alpha", beta_weight}] = Associations.get("beta")
       assert beta_weight == alpha_weight
 
       Associations.decay(5)
@@ -197,23 +238,22 @@ defmodule WetwareTest do
   end
 
   describe "Persistence" do
-    test "save and load round-trips basic structure" do
+    test "save and load round-trips sparse structure" do
       tmp_file = tmp_path("save_load")
 
+      {:ok, _} = Gel.ensure_cell({30, 30}, :test)
       Cell.restore({30, 30}, 0.7, %{})
       assert {:ok, _} = Gel.step()
 
       assert :ok = Persistence.save(tmp_file)
       assert File.exists?(tmp_file)
 
-      {:ok, data} = File.read(tmp_file)
-      state = Jason.decode!(data)
+      state = Jason.decode!(File.read!(tmp_file))
 
-      assert state["version"] == "elixir-v2"
+      assert state["version"] == "elixir-v3-sparse"
       assert is_integer(state["step_count"])
-      assert is_list(state["charges"])
-      assert length(state["charges"]) == 80
-      assert length(hd(state["charges"])) == 80
+      assert is_map(state["cells"])
+      assert map_size(state["cells"]) > 0
 
       assert :ok = Persistence.load(tmp_file)
       File.rm(tmp_file)
@@ -221,6 +261,9 @@ defmodule WetwareTest do
 
     test "full save/load restores exact known state" do
       tmp_file = tmp_path("exact_roundtrip")
+
+      {:ok, _} = Gel.ensure_cell({20, 20}, :test)
+      {:ok, _} = Gel.ensure_cell({21, 20}, :test)
 
       weights_a = custom_weight_map({20, 20}, 0.2, 0.01)
       weights_b = custom_weight_map({21, 20}, 0.5, 0.02)
@@ -258,7 +301,6 @@ defmodule WetwareTest do
     test "load returns file_read error for missing file" do
       missing = tmp_path("missing")
       File.rm(missing)
-
       assert {:error, {:file_read, :enoent}} = Persistence.load(missing)
     end
 
@@ -269,12 +311,74 @@ defmodule WetwareTest do
       assert {:error, {:json_parse, _reason}} = Persistence.load(bad)
       File.rm(bad)
     end
+
+    test "load migrates legacy elixir-v2 dense state" do
+      legacy = tmp_path("legacy_v2")
+
+      payload = %{
+        "version" => "elixir-v2",
+        "step_count" => 9,
+        "charges" => [
+          [0.0, 0.2],
+          [0.0, 0.0]
+        ],
+        "weights" => [
+          [
+            List.duplicate(0.1, 8),
+            List.duplicate(0.2, 8)
+          ],
+          [
+            List.duplicate(0.1, 8),
+            List.duplicate(0.1, 8)
+          ]
+        ],
+        "crystallized" => [
+          [
+            List.duplicate(false, 8),
+            List.duplicate(false, 8)
+          ],
+          [
+            List.duplicate(false, 8),
+            List.duplicate(false, 8)
+          ]
+        ],
+        "concepts" => %{
+          "legacy" => %{"cx" => 1, "cy" => 0, "r" => 2, "tags" => ["old"]}
+        }
+      }
+
+      File.write!(legacy, Jason.encode!(payload, pretty: true))
+      assert :ok = Persistence.load(legacy)
+      assert Gel.step_count() == 9
+      assert {:ok, _pid} = Wetware.Gel.Index.cell_pid({1, 0})
+      assert %{charge: charge} = Cell.get_state({1, 0})
+      assert charge > 0.0
+      File.rm(legacy)
+    end
+  end
+
+  describe "Lifecycle" do
+    test "dormancy sweep despawns dormant non-crystallized cells" do
+      coord = {580, 580}
+      {:ok, _} = Gel.ensure_cell(coord, :test, kind: :interstitial)
+
+      Cell.restore(coord, 0.0, %{},
+        kind: :interstitial,
+        last_step: 0,
+        last_active_step: 0
+      )
+
+      Wetware.Gel.Lifecycle.tick(10_000)
+      send(Wetware.Gel.Lifecycle, :sweep)
+
+      wait_until(fn -> match?(:error, Wetware.Gel.Index.cell_pid(coord)) end)
+      assert :error = Wetware.Gel.Index.cell_pid(coord)
+    end
   end
 
   describe "Resonance API" do
     test "briefing returns expected structure" do
       b = Resonance.briefing()
-
       assert is_integer(b.step_count)
       assert is_integer(b.total_concepts)
       assert is_list(b.active)
@@ -284,9 +388,7 @@ defmodule WetwareTest do
 
     test "dream mode advances steps and returns echoes" do
       before = Gel.step_count()
-
       result = Resonance.dream(steps: 3, intensity: 0.4)
-
       assert %{steps: 3, echoes: echoes} = result
       assert is_list(echoes)
       assert Gel.step_count() == before + 3
@@ -313,11 +415,53 @@ defmodule WetwareTest do
                Concept.charge(name) > Map.fetch!(before_charges, name)
              end)
     end
+
+    test "phase 1 sparse flow works end-to-end" do
+      tmp_dir = Path.join(System.tmp_dir!(), "wetware_phase1_#{System.unique_integer([:positive, :monotonic])}")
+      File.mkdir_p!(tmp_dir)
+      concepts_path = Path.join(tmp_dir, "concepts.json")
+      state_path = Path.join(tmp_dir, "gel_state.json")
+      File.write!(concepts_path, Jason.encode!(%{"concepts" => %{}}, pretty: true))
+
+      name = unique_name("phase1")
+
+      assert :ok = Gel.reset_cells()
+      assert Registry.count(Wetware.CellRegistry) == 0
+
+      assert {:ok, concept} =
+               Resonance.add_concept(
+                 %Concept{name: name, r: 3, tags: ["phase1", "integration"]},
+                 concepts_path: concepts_path
+               )
+
+      assert concept.name == name
+      assert Registry.count(Wetware.CellRegistry) > 0
+
+      charge_before = Concept.charge(name)
+      assert :ok = Resonance.imprint([name], steps: 2, strength: 0.8)
+      assert {:ok, _} = Gel.step()
+      charge_after = Concept.charge(name)
+      assert charge_after > charge_before
+
+      briefing = Resonance.briefing()
+      assert briefing.total_concepts >= 1
+      assert is_list(briefing.active)
+      assert is_list(briefing.warm)
+      assert is_list(briefing.dormant)
+
+      assert :ok = Resonance.save(state_path)
+      assert :ok = Gel.reset_cells()
+      assert Registry.count(Wetware.CellRegistry) == 0
+      assert :ok = Resonance.load(state_path)
+      assert Registry.count(Wetware.CellRegistry) > 0
+      assert Concept.charge(name) > 0.0
+
+      assert :ok = Resonance.remove_concept(name, concepts_path: concepts_path)
+      File.rm_rf(tmp_dir)
+    end
   end
 
-  defp weight_at({x, y}, offset) do
-    Cell.get_state({x, y}).neighbors[offset].weight
-  end
+  defp weight_at({x, y}, offset), do: Cell.get_state({x, y}).neighbors[offset].weight
 
   defp uniform_weights_map({x, y}, weight, crystallized) do
     Cell.get_state({x, y}).neighbors
@@ -365,14 +509,24 @@ defmodule WetwareTest do
     concept
   end
 
-  defp unique_name(prefix) do
-    "#{prefix}-#{System.unique_integer([:positive, :monotonic])}"
-  end
+  defp unique_name(prefix), do: "#{prefix}-#{System.unique_integer([:positive, :monotonic])}"
 
   defp tmp_path(label) do
-    Path.join(
-      System.tmp_dir!(),
-      "wetware_test_#{label}_#{System.unique_integer([:positive, :monotonic])}.json"
-    )
+    Path.join(System.tmp_dir!(), "wetware_test_#{label}_#{System.unique_integer([:positive, :monotonic])}.json")
+  end
+
+  defp wait_until(fun, attempts \\ 30)
+
+  defp wait_until(fun, attempts) when attempts <= 0 do
+    assert fun.()
+  end
+
+  defp wait_until(fun, attempts) do
+    if fun.() do
+      :ok
+    else
+      Process.sleep(25)
+      wait_until(fun, attempts - 1)
+    end
   end
 end

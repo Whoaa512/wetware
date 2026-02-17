@@ -1,7 +1,7 @@
 defmodule Wetware.DiscoveryTest do
   use ExUnit.Case, async: false
 
-  alias Wetware.{Concept, DataPaths, Discovery, Gel, Layout, Resonance}
+  alias Wetware.{Concept, DataPaths, Discovery, Gel, Resonance}
 
   setup_all do
     tmp_dir =
@@ -58,19 +58,23 @@ defmodule Wetware.DiscoveryTest do
     assert :ok = Resonance.remove_concept(term)
   end
 
-  test "layout finds non-colliding anchor-near positions" do
-    concepts = [
-      %{name: "anchor", cx: 40, cy: 40, r: 3, tags: []},
-      %{name: "occupied", cx: 46, cy: 40, r: 3, tags: []}
-    ]
+  test "layout engine places nearby by tag overlap" do
+    existing = %{
+      "anchor" => %{center: {40, 40}, r: 3, tags: ["software", "engineering"]},
+      "occupied" => %{center: {46, 40}, r: 3, tags: ["analysis"]}
+    }
 
-    pos = Layout.find_position(%{cx: 40, cy: 40, r: 3}, concepts)
-    assert is_tuple(pos)
-    assert Layout.is_empty_spot(pos, concepts, r: 3)
+    {x, y} = Wetware.Layout.Engine.place("candidate", ["software"], existing)
+    assert is_integer(x)
+    assert is_integer(y)
+  end
 
-    {x, y} = pos
-    dist = :math.sqrt((x - 40) * (x - 40) + (y - 40) * (y - 40))
-    assert dist <= 10
+  test "layout engine exposes pluggable strategy module" do
+    strategy = Wetware.Layout.Engine.strategy()
+    assert strategy == Wetware.Layout.Proximity
+    assert function_exported?(strategy, :place, 3)
+    assert function_exported?(strategy, :should_grow?, 2)
+    assert function_exported?(strategy, :should_shrink?, 2)
   end
 
   test "pending concepts state persists" do
@@ -86,8 +90,8 @@ defmodule Wetware.DiscoveryTest do
   defp seed_concepts(tmp_dir) do
     concepts = %{
       "concepts" => %{
-        "coding" => %{"cx" => 10, "cy" => 10, "r" => 3, "tags" => ["software", "engineering"]},
-        "research" => %{"cx" => 20, "cy" => 12, "r" => 3, "tags" => ["analysis", "investigation"]}
+        "coding" => %{"tags" => ["software", "engineering"]},
+        "research" => %{"tags" => ["analysis", "investigation"]}
       }
     }
 

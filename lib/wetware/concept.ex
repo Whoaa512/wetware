@@ -1,28 +1,15 @@
 defmodule Wetware.Concept do
   @moduledoc """
-  A named concept that owns a circular region of the gel.
-
-  Concepts are the semantic layer on top of the substrate —
-  named regions that accumulate meaning through use.
-  Each concept knows its center, radius, tags, and can report
-  its charge level and associations with other concepts.
+  Named concept process layered over sparse gel cells.
   """
 
   use GenServer
 
-  alias Wetware.{Cell, Params}
+  alias Wetware.{Cell, Gel, Params}
 
   defstruct [:name, :cx, :cy, :r, tags: []]
 
-  @type t :: %__MODULE__{
-          name: String.t(),
-          cx: non_neg_integer(),
-          cy: non_neg_integer(),
-          r: non_neg_integer(),
-          tags: [String.t()]
-        }
-
-  # ── Client API ──────────────────────────────────────────────
+  @type t :: %__MODULE__{}
 
   def start_link(opts) do
     concept = Keyword.fetch!(opts, :concept)
@@ -31,84 +18,57 @@ defmodule Wetware.Concept do
 
   def via(name), do: {:via, Registry, {Wetware.ConceptRegistry, name}}
 
-  @doc "Stimulate all cells in this concept's region."
-  def stimulate(name, strength \\ 1.0) do
-    GenServer.cast(via(name), {:stimulate, strength})
-  end
+  def stimulate(name, strength \\ 1.0), do: GenServer.cast(via(name), {:stimulate, strength})
+  def charge(name), do: GenServer.call(via(name), :charge, 15_000)
+  def associations(name), do: GenServer.call(via(name), :associations, 30_000)
+  def info(name), do: GenServer.call(via(name), :info)
 
-  @doc "Get the mean charge across the concept's region."
-  def charge(name) do
-    GenServer.call(via(name), :charge, 15_000)
-  end
-
-  @doc "Find associated concepts via inter-region connection weights."
-  def associations(name) do
-    GenServer.call(via(name), :associations, 30_000)
-  end
-
-  @doc "Get concept info."
-  def info(name) do
-    GenServer.call(via(name), :info)
-  end
-
-  @doc "List all registered concepts."
   def list_all do
     Registry.select(Wetware.ConceptRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
     |> Enum.sort()
   end
 
-  @doc "Load concepts from a JSON file."
+  @doc "Load concepts from JSON. Supports v2 (cx/cy/r) and sparse tags-only input."
   def load_from_json(path) do
-    case File.read(path) do
-      {:ok, data} ->
-        case Jason.decode(data) do
-          {:ok, %{"concepts" => concepts}} ->
-            Enum.map(concepts, fn {name, info} ->
-              %__MODULE__{
-                name: name,
-                cx: info["cx"],
-                cy: info["cy"],
-                r: info["r"],
-                tags: info["tags"] || []
-              }
-            end)
-
-          {:ok, _} ->
-            {:error, :invalid_format}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+    with {:ok, data} <- File.read(path),
+         {:ok, %{"concepts" => concepts}} <- Jason.decode(data) do
+      concepts
+      |> Enum.map(fn {name, info} ->
+        %__MODULE__{
+          name: name,
+          cx: info["cx"],
+          cy: info["cy"],
+          r: info["r"] || 3,
+          tags: info["tags"] || []
+        }
+      end)
+    else
+      {:ok, _} -> {:error, :invalid_format}
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  @doc "Register all concepts from a list."
   def register_all(concepts) when is_list(concepts) do
     Enum.each(concepts, fn concept ->
-      {:ok, _} =
-        DynamicSupervisor.start_child(
-          Wetware.ConceptSupervisor,
-          {__MODULE__, concept: concept}
-        )
+      {:ok, _} = DynamicSupervisor.start_child(Wetware.ConceptSupervisor, {__MODULE__, concept: concept})
     end)
 
     :ok
   end
 
-  # ── Server ──────────────────────────────────────────────────
-
   @impl true
   def init(concept) do
-    {:ok, concept}
+    {:ok, registered} = Gel.register_concept(concept)
+    {:ok, struct(__MODULE__, Map.from_struct(registered))}
   end
 
   @impl true
   def handle_cast({:stimulate, strength}, concept) do
     cells_in_region(concept)
-    |> Enum.each(fn {x, y} -> Cell.stimulate({x, y}, strength) end)
+    |> Enum.each(fn {x, y} ->
+      if match?([_ | _], Registry.lookup(Wetware.CellRegistry, {x, y})),
+        do: Cell.stimulate({x, y}, strength)
+    end)
 
     {:noreply, concept}
   end
@@ -137,7 +97,6 @@ defmodule Wetware.Concept do
   def handle_call(:associations, _from, concept) do
     my_cells = cells_in_region(concept) |> MapSet.new()
 
-    # Get all other concepts
     other_concepts =
       list_all()
       |> Enum.reject(&(&1 == concept.name))
@@ -149,12 +108,10 @@ defmodule Wetware.Concept do
       end)
       |> Enum.reject(&is_nil/1)
 
-    # For each other concept, measure cross-region connection strength
     associations =
       Enum.map(other_concepts, fn other ->
         other_cells = cells_in_region(other) |> MapSet.new()
 
-        # Check border cells — cells in my region whose neighbors are in other region
         border_weights =
           for {x, y} <- my_cells,
               {dy, dx} <- Params.neighbor_offsets(),
@@ -187,18 +144,30 @@ defmodule Wetware.Concept do
   end
 
   def handle_call(:info, _from, concept) do
-    {:reply, concept, concept}
+    info =
+      case Gel.concept_region(concept.name) do
+        %{cx: _cx} = region -> Map.merge(Map.from_struct(concept), region)
+        _ -> Map.from_struct(concept)
+      end
+
+    {:reply, struct(__MODULE__, info), concept}
   end
 
-  # ── Helpers ─────────────────────────────────────────────────
+  @impl true
+  def terminate(_reason, concept) do
+    try do
+      _ = Gel.unregister_concept(concept.name)
+    catch
+      :exit, _ -> :ok
+    end
+
+    :ok
+  end
 
   defp cells_in_region(%{cx: cx, cy: cy, r: r}) do
-    p = Params.default()
-    r2 = r * r
-
-    for y <- max(0, cy - r)..min(p.height - 1, cy + r),
-        x <- max(0, cx - r)..min(p.width - 1, cx + r),
-        (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2 do
+    for y <- (cy - r)..(cy + r),
+        x <- (cx - r)..(cx + r),
+        (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r do
       {x, y}
     end
   end

@@ -1,7 +1,7 @@
 defmodule Wetware.Discovery do
   @moduledoc "Concept discovery and graduation from recurring text terms."
 
-  alias Wetware.{Concept, DataPaths, Layout, Resonance}
+  alias Wetware.{Concept, DataPaths, Resonance}
 
   @default_hit_threshold 5
   @default_session_threshold 3
@@ -102,16 +102,9 @@ defmodule Wetware.Discovery do
 
       anchor = pick_anchor(entry, tags, concepts)
 
-      pos =
-        case anchor do
-          nil -> Layout.find_position_default(concepts, r: radius)
-          anchor_concept -> Layout.find_position(anchor_concept, concepts)
-        end
-
-      with {:ok, {cx, cy}} <- ensure_position(pos),
-           {:ok, concept} <-
+      with {:ok, concept} <-
              Resonance.add_concept(
-               %Concept{name: term, cx: cx, cy: cy, r: radius, tags: tags},
+               %Concept{name: term, r: radius, tags: tags},
                concepts_path: DataPaths.concepts_path()
              ) do
         updated_terms = Map.delete(terms, term)
@@ -203,9 +196,6 @@ defmodule Wetware.Discovery do
       :ok
     end
   end
-
-  defp ensure_position(nil), do: {:error, :no_space_available}
-  defp ensure_position({x, y}), do: {:ok, {x, y}}
 
   defp pick_anchor(entry, tags, concepts) do
     co = Map.get(entry, "cooccurrence", %{})

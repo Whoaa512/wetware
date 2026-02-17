@@ -151,7 +151,7 @@ defmodule Wetware.Replay do
   end
 
   defp dream_steps(steps) do
-    p = Gel.params()
+    b = Gel.bounds()
 
     before_charges =
       Concept.list_all()
@@ -159,8 +159,8 @@ defmodule Wetware.Replay do
       |> Map.new()
 
     Enum.each(1..steps, fn _ ->
-      x = :rand.uniform(p.width) - 1
-      y = :rand.uniform(p.height) - 1
+      x = rand_between(b.min_x - 2, b.max_x + 2)
+      y = rand_between(b.min_y - 2, b.max_y + 2)
       r = :rand.uniform(3) + 1
       Gel.stimulate_region(x, y, r, 0.3)
       Gel.step()
@@ -184,6 +184,9 @@ defmodule Wetware.Replay do
 
     %{echoes: echoes}
   end
+
+  defp rand_between(a, b) when a >= b, do: a
+  defp rand_between(a, b), do: :rand.uniform(b - a + 1) + a - 1
 
   defp extract_concepts(text_lower, concept_defs) do
     concept_defs

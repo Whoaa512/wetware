@@ -3,9 +3,23 @@ defmodule Wetware.CLI do
 
   alias Wetware.{DataPaths, Discovery, Pruning, Resonance}
 
+  # Embed default concepts at compile time so init works from the escript
+  @default_concepts File.read!(Path.expand("example/concepts.json", __DIR__ |> Path.join("../..")))
+
   def main(argv) do
     Application.ensure_all_started(:wetware)
 
+    # Handle init before full boot — it scaffolds the data dir
+    case argv do
+      ["init" | _] ->
+        cmd_init()
+
+      _ ->
+        boot_and_dispatch(argv)
+    end
+  end
+
+  defp boot_and_dispatch(argv) do
     DataPaths.ensure_data_dir!()
     concepts_path = DataPaths.concepts_path()
     gel_state_path = DataPaths.gel_state_path()
@@ -27,6 +41,85 @@ defmodule Wetware.CLI do
       ["help" | _] -> cmd_help()
       [] -> cmd_help()
       _ -> IO.puts("Unknown command. Run: wetware help")
+    end
+  end
+
+  defp cmd_init do
+    data_dir = DataPaths.data_dir()
+    concepts_path = DataPaths.concepts_path()
+
+    already_exists = File.exists?(concepts_path)
+
+    cond do
+      already_exists and has_concepts?(concepts_path) ->
+        IO.puts("")
+        IO.puts("#{IO.ANSI.green()}✓ Wetware is already initialized#{IO.ANSI.reset()}")
+        IO.puts("  Data dir: #{data_dir}")
+
+        concept_count = count_concepts(concepts_path)
+        IO.puts("  Concepts: #{concept_count}")
+
+        if File.exists?(DataPaths.gel_state_path()) do
+          IO.puts("  Gel state: saved")
+        else
+          IO.puts("  Gel state: not yet (run #{IO.ANSI.cyan()}wetware imprint#{IO.ANSI.reset()} to start)")
+        end
+
+        IO.puts("")
+        IO.puts("  Run #{IO.ANSI.cyan()}wetware status#{IO.ANSI.reset()} for full details.")
+        IO.puts("")
+
+      true ->
+        # Scaffold the data directory
+        File.mkdir_p!(data_dir)
+
+        # Write the starter concepts
+        File.write!(concepts_path, @default_concepts)
+
+        concept_count = count_concepts(concepts_path)
+
+        IO.puts("")
+        IO.puts("#{IO.ANSI.green()}🧬 Wetware initialized!#{IO.ANSI.reset()}")
+        IO.puts("")
+        IO.puts("  Data dir:  #{data_dir}")
+        IO.puts("  Concepts:  #{concept_count} starter concepts loaded")
+        IO.puts("")
+        IO.puts("  #{IO.ANSI.bright()}What's here:#{IO.ANSI.reset()}")
+        IO.puts("  #{data_dir}/concepts.json — your concept definitions")
+        IO.puts("  Edit this file to add your own concepts, or use:")
+        IO.puts("    #{IO.ANSI.cyan()}wetware discover#{IO.ANSI.reset()} to auto-discover from text")
+        IO.puts("")
+        IO.puts("  #{IO.ANSI.bright()}Next steps:#{IO.ANSI.reset()}")
+        IO.puts("    #{IO.ANSI.cyan()}wetware imprint \"coding, creativity\"#{IO.ANSI.reset()}  — stimulate concepts")
+        IO.puts("    #{IO.ANSI.cyan()}wetware dream --steps 20#{IO.ANSI.reset()}             — let the gel find connections")
+        IO.puts("    #{IO.ANSI.cyan()}wetware briefing#{IO.ANSI.reset()}                     — see what's resonating")
+        IO.puts("")
+    end
+  end
+
+  defp has_concepts?(path) do
+    case File.read(path) do
+      {:ok, data} ->
+        case Jason.decode(data) do
+          {:ok, %{"concepts" => concepts}} when map_size(concepts) > 0 -> true
+          _ -> false
+        end
+
+      _ ->
+        false
+    end
+  end
+
+  defp count_concepts(path) do
+    case File.read(path) do
+      {:ok, data} ->
+        case Jason.decode(data) do
+          {:ok, %{"concepts" => concepts}} -> map_size(concepts)
+          _ -> 0
+        end
+
+      _ ->
+        0
     end
   end
 
@@ -66,7 +159,7 @@ defmodule Wetware.CLI do
     hot_cells =
       try do
         Wetware.Gel.get_charges()
-        |> List.flatten()
+        |> Map.values()
         |> Enum.count(&(&1 > 0.5))
       rescue
         _ -> "?"
@@ -181,6 +274,7 @@ defmodule Wetware.CLI do
       wetware <command> [options]
 
     #{IO.ANSI.bright()}COMMANDS:#{IO.ANSI.reset()}
+      init                            Set up data dir with starter concepts
       briefing                        Show resonance briefing
       concepts                        List concepts and charge levels
       imprint \"concept1, concept2\"    Stimulate concepts

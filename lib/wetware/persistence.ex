@@ -1,138 +1,78 @@
 defmodule Wetware.Persistence do
-  @moduledoc """
-  Save and load gel state to JSON.
-
-  The format is designed to be readable and compatible with Python v1
-  in spirit — storing charges, weights, and crystallization state
-  for the full grid.
-  """
+  @moduledoc "Save/load sparse gel state to JSON (elixir-v3-sparse)."
 
   alias Wetware.{Cell, DataPaths, Gel, Params}
 
   @default_path DataPaths.gel_state_path()
 
-  @doc "Save the current gel state to a JSON file."
   def save(path \\ @default_path) do
     p = Gel.params()
     step_count = Gel.step_count()
+    live_cells = Wetware.Gel.Index.list_cells()
+    snapshots = Wetware.Gel.Index.list_snapshots()
 
-    IO.puts("💾 Saving gel state (#{p.width}×#{p.height}, step #{step_count})...")
+    live_map =
+      live_cells
+      |> Enum.map(fn {{x, y}, pid} -> {"#{x}:#{y}", serialize_cell_state(Cell.get_state(pid))} end)
+      |> Map.new()
 
-    # Collect all cell states
-    cells =
-      for y <- 0..(p.height - 1),
-          x <- 0..(p.width - 1) do
-        Cell.get_state({x, y})
-      end
+    snapshot_map =
+      snapshots
+      |> Enum.map(fn {{x, y}, snapshot} -> {"#{x}:#{y}", serialize_cell_state(snapshot)} end)
+      |> Map.new()
 
-    # Build charge grid
-    charges =
-      for y <- 0..(p.height - 1) do
-        for x <- 0..(p.width - 1) do
-          cell = Enum.find(cells, fn c -> c.x == x and c.y == y end)
-          Float.round(cell.charge, 6)
-        end
-      end
+    cell_map = Map.merge(snapshot_map, live_map)
 
-    # Build weights grid: for each cell, 8 neighbor weights
-    # Using offset ordering from Params.neighbor_offsets()
-    offsets = Params.neighbor_offsets()
-
-    weights =
-      for y <- 0..(p.height - 1) do
-        for x <- 0..(p.width - 1) do
-          cell = Enum.find(cells, fn c -> c.x == x and c.y == y end)
-
-          Enum.map(offsets, fn offset ->
-            case Map.get(cell.neighbors, offset) do
-              %{weight: w} -> Float.round(w, 6)
-              _ -> p.w_init
-            end
-          end)
-        end
-      end
-
-    # Build crystallized grid
-    crystallized =
-      for y <- 0..(p.height - 1) do
-        for x <- 0..(p.width - 1) do
-          cell = Enum.find(cells, fn c -> c.x == x and c.y == y end)
-
-          Enum.map(offsets, fn offset ->
-            case Map.get(cell.neighbors, offset) do
-              %{crystallized: c} -> c
-              _ -> false
-            end
-          end)
-        end
-      end
-
-    # Build concepts state
     concepts =
-      Wetware.Concept.list_all()
-      |> Enum.map(fn name ->
-        info = Wetware.Concept.info(name)
-        charge = Wetware.Concept.charge(name)
+      Gel.concepts()
+      |> Enum.map(fn {name, info} ->
+        {cx, cy} = info.center
 
         {name,
          %{
-           cx: info.cx,
-           cy: info.cy,
-           r: info.r,
-           tags: info.tags,
-           charge: Float.round(charge, 6)
+           "center" => [cx, cy],
+           "r" => info.r,
+           "tags" => info.tags,
+           "charge" => Float.round(safe_concept_charge(name), 6)
          }}
       end)
       |> Map.new()
 
-    # Export co-activation associations
-    assoc_data = Wetware.Associations.export()
-
     state = %{
-      version: "elixir-v2",
-      step_count: step_count,
-      params: %{
-        width: p.width,
-        height: p.height,
-        propagation_rate: p.propagation_rate,
-        charge_decay: p.charge_decay,
-        activation_threshold: p.activation_threshold,
-        learning_rate: p.learning_rate,
-        decay_rate: p.decay_rate,
-        crystal_threshold: p.crystal_threshold,
-        crystal_decay_factor: p.crystal_decay_factor,
-        w_init: p.w_init,
-        w_min: p.w_min,
-        w_max: p.w_max
+      "version" => "elixir-v3-sparse",
+      "step_count" => step_count,
+      "params" => %{
+        "propagation_rate" => p.propagation_rate,
+        "charge_decay" => p.charge_decay,
+        "activation_threshold" => p.activation_threshold,
+        "learning_rate" => p.learning_rate,
+        "decay_rate" => p.decay_rate,
+        "crystal_threshold" => p.crystal_threshold,
+        "crystal_decay_factor" => p.crystal_decay_factor,
+        "w_init" => p.w_init,
+        "w_min" => p.w_min,
+        "w_max" => p.w_max,
+        "spawn_threshold" => p.spawn_threshold,
+        "despawn_dormancy_ttl" => p.despawn_dormancy_ttl
       },
-      charges: charges,
-      weights: weights,
-      crystallized: crystallized,
-      concepts: concepts,
-      associations: assoc_data,
-      saved_at: DateTime.utc_now() |> DateTime.to_iso8601()
+      "cells" => cell_map,
+      "concepts" => concepts,
+      "associations" => Wetware.Associations.export(),
+      "saved_at" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
 
     json = Jason.encode!(state, pretty: true)
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, json)
-
-    IO.puts("   ✓ Saved to #{path} (#{byte_size(json)} bytes)")
     :ok
   end
 
-  @doc "Load gel state from a JSON file."
   def load(path \\ @default_path) do
-    IO.puts("📂 Loading gel state from #{path}...")
-
     case File.read(path) do
       {:ok, data} ->
         case Jason.decode(data) do
-          {:ok, state} ->
-            restore_state(state)
-
-          {:error, reason} ->
-            {:error, {:json_parse, reason}}
+          {:ok, state} -> restore_state(state)
+          {:error, reason} -> {:error, {:json_parse, reason}}
         end
 
       {:error, reason} ->
@@ -140,52 +80,126 @@ defmodule Wetware.Persistence do
     end
   end
 
+  defp restore_state(%{"version" => "elixir-v3-sparse"} = state) do
+    restore_sparse_state(state)
+  end
+
+  defp restore_state(%{"version" => "elixir-v2"} = state) do
+    sparse = Wetware.Persistence.V2Migration.to_sparse_state(state)
+    restore_sparse_state(sparse)
+  end
+
   defp restore_state(state) do
-    charges = state["charges"]
-    weights = state["weights"]
-    crystallized = state["crystallized"]
-    offsets = Params.neighbor_offsets()
-    p = Gel.params()
-
-    if charges == nil do
-      {:error, :no_charges}
+    if Map.has_key?(state, "charges") do
+      sparse = Wetware.Persistence.V2Migration.to_sparse_state(state)
+      restore_sparse_state(sparse)
     else
-      count =
-        for y <- 0..(p.height - 1),
-            x <- 0..(p.width - 1) do
-          charge = get_in(charges, [Access.at(y), Access.at(x)]) || 0.0
+      {:error, :unsupported_version}
+    end
+  end
 
-          cell_weights = get_in(weights, [Access.at(y), Access.at(x)]) || []
-          cell_cryst = get_in(crystallized, [Access.at(y), Access.at(x)]) || []
+  defp restore_sparse_state(state) do
+    p = Gel.params() || Params.default()
+    step_count = state["step_count"] || 0
+    concepts = parse_concepts(state["concepts"] || %{})
+    Gel.reset_cells()
+    Gel.set_step_count(step_count)
+    Gel.set_concepts(concepts)
 
-          weights_map =
-            offsets
-            |> Enum.with_index()
-            |> Enum.map(fn {offset, i} ->
-              w = Enum.at(cell_weights, i, p.w_init)
-              c = Enum.at(cell_cryst, i, false)
-              {offset, %{weight: w, crystallized: c}}
-            end)
-            |> Map.new()
+    cells = state["cells"] || %{}
 
-          Cell.restore({x, y}, charge, weights_map)
-        end
+    Enum.each(cells, fn {key, data} ->
+      {x, y} = parse_coord_key(key)
 
-      restored = length(count)
-      step_count = state["step_count"] || 0
-      Gel.set_step_count(step_count)
+      {:ok, _pid} =
+        Gel.ensure_cell({x, y}, :restore,
+          kind: parse_kind(data["kind"]),
+          owners: data["owners"] || []
+        )
 
-      # Restore co-activation associations
-      case state["associations"] do
-        nil -> :ok
-        assoc_data -> Wetware.Associations.import(assoc_data)
-      end
+      weights_map =
+        (data["neighbors"] || %{})
+        |> Enum.map(fn {offset_key, info} ->
+          {parse_offset_key(offset_key), %{weight: info["weight"] || p.w_init, crystallized: info["crystallized"] || false}}
+        end)
+        |> Map.new()
 
-      IO.puts(
-        "   ✓ Restored #{restored} cells from #{state["version"] || "unknown"} (step #{step_count})"
+      Cell.restore({x, y}, data["charge"] || 0.0, weights_map,
+        kind: parse_kind(data["kind"]),
+        owners: data["owners"] || [],
+        last_step: data["last_step"] || step_count,
+        last_active_step: data["last_active_step"] || step_count
       )
+    end)
 
-      :ok
+    case state["associations"] do
+      nil -> :ok
+      assoc_data -> Wetware.Associations.import(assoc_data)
+    end
+
+    :ok
+  end
+
+  defp serialize_cell_state(state) do
+    neighbors =
+      Map.get(state, :neighbors, %{})
+      |> Enum.map(fn {{dx, dy}, entry} ->
+        {"#{dx}:#{dy}",
+         %{
+           "weight" => Float.round(Map.get(entry, :weight, 0.0), 6),
+           "crystallized" => Map.get(entry, :crystallized, false)
+         }}
+      end)
+      |> Map.new()
+
+    %{
+      "charge" => Float.round(Map.get(state, :charge, 0.0), 6),
+      "kind" => Atom.to_string(Map.get(state, :kind, :interstitial)),
+      "owners" => Map.get(state, :owners, []),
+      "last_step" => Map.get(state, :last_step, 0),
+      "last_active_step" => Map.get(state, :last_active_step, 0),
+      "neighbors" => neighbors
+    }
+  end
+
+  defp parse_concepts(concepts) do
+    concepts
+    |> Enum.map(fn {name, info} ->
+      info = if is_map(info), do: info, else: %{}
+      {cx, cy} = parse_center(info)
+      r = info["r"] || info["base_radius"] || info["current_radius"] || 3
+      tags = info["tags"] || []
+      {name, %{center: {cx, cy}, r: r, tags: tags}}
+    end)
+    |> Map.new()
+  end
+
+  defp parse_center(%{"center" => [cx, cy]}), do: {cx, cy}
+  defp parse_center(%{"cx" => cx, "cy" => cy}), do: {cx, cy}
+  defp parse_center(_), do: {0, 0}
+
+  defp parse_coord_key(key) do
+    [x, y] = String.split(key, ":", parts: 2)
+    {String.to_integer(x), String.to_integer(y)}
+  end
+
+  defp parse_offset_key(key) do
+    [dx, dy] = String.split(key, ":", parts: 2)
+    {String.to_integer(dx), String.to_integer(dy)}
+  end
+
+  defp parse_kind(nil), do: :interstitial
+  defp parse_kind("concept"), do: :concept
+  defp parse_kind("axon"), do: :axon
+  defp parse_kind("interstitial"), do: :interstitial
+  defp parse_kind(atom) when is_atom(atom), do: atom
+  defp parse_kind(_), do: :interstitial
+
+  defp safe_concept_charge(name) do
+    try do
+      Wetware.Concept.charge(name)
+    catch
+      :exit, _ -> 0.0
     end
   end
 end

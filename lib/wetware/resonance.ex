@@ -1,19 +1,10 @@
 defmodule Wetware.Resonance do
-  @moduledoc """
-  The main API for the digital wetware.
-
-  This is what you interact with - imprint concepts, get briefings,
-  run dream mode, save and load state.
-  """
+  @moduledoc "Main API for imprinting, dreaming, briefing, and persistence." 
 
   alias Wetware.{Concept, DataPaths, Gel, Persistence}
 
   @dormancy_table :wetware_dormancy
 
-  @doc """
-  Boot the gel substrate and load concepts.
-  Call this once to bring the wetware online.
-  """
   def boot(opts \\ []) do
     DataPaths.ensure_data_dir!()
     concepts_path = Keyword.get(opts, :concepts_path, DataPaths.concepts_path())
@@ -37,7 +28,6 @@ defmodule Wetware.Resonance do
     end
   end
 
-  @doc "Add a concept at runtime and persist to concepts.json."
   def add_concept(concept_or_attrs, opts \\ [])
 
   def add_concept(%Concept{} = concept, opts) do
@@ -49,15 +39,15 @@ defmodule Wetware.Resonance do
          :ok <- persist_concept(concept, concepts_path) do
       ensure_dormancy_table!()
       :ets.insert(@dormancy_table, {concept.name, Gel.step_count()})
-      {:ok, concept}
+      {:ok, Concept.info(concept.name)}
     end
   end
 
   def add_concept(attrs, opts) when is_map(attrs) do
     concept = %Concept{
       name: Map.fetch!(attrs, :name),
-      cx: Map.fetch!(attrs, :cx),
-      cy: Map.fetch!(attrs, :cy),
+      cx: Map.get(attrs, :cx),
+      cy: Map.get(attrs, :cy),
       r: Map.get(attrs, :r, 3),
       tags: Map.get(attrs, :tags, [])
     }
@@ -65,13 +55,13 @@ defmodule Wetware.Resonance do
     add_concept(concept, opts)
   end
 
-  @doc "Remove a concept at runtime and persist concepts.json."
   def remove_concept(name, opts \\ []) when is_binary(name) do
     concepts_path = Keyword.get(opts, :concepts_path, DataPaths.concepts_path())
 
     case Registry.lookup(Wetware.ConceptRegistry, name) do
       [{pid, _}] ->
         :ok = DynamicSupervisor.terminate_child(Wetware.ConceptSupervisor, pid)
+        :ok = Gel.unregister_concept(name)
         remove_persisted_concept(name, concepts_path)
         ensure_dormancy_table!()
         :ets.delete(@dormancy_table, name)
@@ -82,25 +72,16 @@ defmodule Wetware.Resonance do
     end
   end
 
-  @doc """
-  Imprint concepts - stimulate them and run propagation steps.
-  """
   def imprint(concept_names, opts \\ []) do
     steps = Keyword.get(opts, :steps, 5)
     strength = Keyword.get(opts, :strength, 1.0)
 
-    Enum.each(concept_names, fn name ->
-      Concept.stimulate(name, strength)
-    end)
-
-    Enum.each(1..steps, fn _i ->
-      Gel.step()
-    end)
+    Enum.each(concept_names, fn name -> Concept.stimulate(name, strength) end)
+    Enum.each(1..steps, fn _ -> Gel.step() end)
 
     :ok
   end
 
-  @doc "Get a resonance briefing - what's active, warm, dormant."
   def briefing do
     concepts = Concept.list_all()
 
@@ -127,29 +108,23 @@ defmodule Wetware.Resonance do
       |> Enum.filter(fn {_name, %{charge: c}} -> c <= 0.01 end)
       |> Enum.map(fn {name, _} -> name end)
 
-    %{
-      step_count: Gel.step_count(),
-      total_concepts: length(concepts),
-      active: active,
-      warm: warm,
-      dormant: dormant
-    }
+    %{step_count: Gel.step_count(), total_concepts: length(concepts), active: active, warm: warm, dormant: dormant}
   end
 
-  @doc "Dream mode - random low-level stimulation to see what resonates."
   def dream(opts \\ []) do
     steps = Keyword.get(opts, :steps, 20)
     intensity = Keyword.get(opts, :intensity, 0.3)
-    p = Gel.params()
 
     before_charges =
       Concept.list_all()
       |> Enum.map(fn name -> {name, Concept.charge(name)} end)
       |> Map.new()
 
-    Enum.each(1..steps, fn _i ->
-      x = :rand.uniform(p.width) - 1
-      y = :rand.uniform(p.height) - 1
+    b = Gel.bounds()
+
+    Enum.each(1..steps, fn _ ->
+      x = rand_between(b.min_x - 2, b.max_x + 2)
+      y = rand_between(b.min_y - 2, b.max_y + 2)
       r = :rand.uniform(3) + 1
       Gel.stimulate_region(x, y, r, intensity)
       Gel.step()
@@ -174,35 +149,19 @@ defmodule Wetware.Resonance do
     %{steps: steps, echoes: echoes}
   end
 
-  @doc "Save the current gel state."
-  def save(path \\ nil) do
-    Persistence.save(path || DataPaths.gel_state_path())
-  end
+  def save(path \\ nil), do: Persistence.save(path || DataPaths.gel_state_path())
+  def load(path \\ nil), do: Persistence.load(path || DataPaths.gel_state_path())
 
-  @doc "Load gel state from file."
-  def load(path \\ nil) do
-    Persistence.load(path || DataPaths.gel_state_path())
-  end
-
-  @doc "List concepts with current charge levels."
   def concepts_with_charges do
     Concept.list_all()
     |> Enum.map(fn name ->
       info = Concept.info(name)
 
-      %{
-        name: name,
-        charge: Concept.charge(name),
-        cx: info.cx,
-        cy: info.cy,
-        r: info.r,
-        tags: info.tags
-      }
+      %{name: name, charge: Concept.charge(name), cx: info.cx, cy: info.cy, r: info.r, tags: info.tags}
     end)
     |> Enum.sort_by(&(-&1.charge))
   end
 
-  @doc "Return dormancy info for a concept."
   def dormancy(name, opts \\ []) do
     threshold = Keyword.get(opts, :threshold, 0.05)
     ensure_dormancy_table!()
@@ -210,9 +169,7 @@ defmodule Wetware.Resonance do
     current_step = Gel.step_count()
     charge = Concept.charge(name)
 
-    if charge > threshold do
-      :ets.insert(@dormancy_table, {name, current_step})
-    end
+    if charge > threshold, do: :ets.insert(@dormancy_table, {name, current_step})
 
     last_active_step =
       case :ets.lookup(@dormancy_table, name) do
@@ -220,33 +177,27 @@ defmodule Wetware.Resonance do
         [] -> 0
       end
 
-    %{
-      concept: name,
-      current_step: current_step,
-      threshold: threshold,
-      last_active_step: last_active_step,
-      dormant_steps: max(current_step - last_active_step, 0),
-      charge: Float.round(charge, 6)
-    }
+    %{concept: name, current_step: current_step, threshold: threshold, last_active_step: last_active_step, dormant_steps: max(current_step - last_active_step, 0), charge: Float.round(charge, 6)}
   end
 
-  @doc "Called by Gel after each step to keep dormancy state current."
   def observe_step(step_count, threshold \\ 0.05) do
     ensure_dormancy_table!()
 
     Concept.list_all()
     |> Enum.each(fn name ->
-      if Concept.charge(name) > threshold do
-        :ets.insert(@dormancy_table, {name, step_count})
-      else
-        maybe_seed_dormancy(name, step_count)
-      end
+      charge =
+        try do
+          Concept.charge(name)
+        catch
+          :exit, _ -> 0.0
+        end
+
+      if charge > threshold, do: :ets.insert(@dormancy_table, {name, step_count}), else: maybe_seed_dormancy(name, step_count)
     end)
 
     :ok
   end
 
-  @doc "Print a formatted briefing to stdout."
   def print_briefing do
     b = briefing()
 
@@ -285,13 +236,13 @@ defmodule Wetware.Resonance do
 
   def concepts_path, do: DataPaths.concepts_path()
 
+  defp rand_between(a, b) when a >= b, do: a
+  defp rand_between(a, b), do: :rand.uniform(b - a + 1) + a - 1
+
   defp ensure_dormancy_table! do
     case :ets.whereis(@dormancy_table) do
-      :undefined ->
-        :ets.new(@dormancy_table, [:set, :named_table, :public, read_concurrency: true])
-
-      _ ->
-        :ok
+      :undefined -> :ets.new(@dormancy_table, [:set, :named_table, :public, read_concurrency: true])
+      _ -> :ok
     end
 
     :ok
@@ -299,9 +250,7 @@ defmodule Wetware.Resonance do
 
   defp seed_dormancy_for_all do
     step = Gel.step_count()
-
-    Concept.list_all()
-    |> Enum.each(fn name -> maybe_seed_dormancy(name, step) end)
+    Concept.list_all() |> Enum.each(fn name -> maybe_seed_dormancy(name, step) end)
   end
 
   defp maybe_seed_dormancy(name, step) do
@@ -312,22 +261,13 @@ defmodule Wetware.Resonance do
   end
 
   defp ensure_name_available(name) do
-    if name in Concept.list_all() do
-      {:error, :already_exists}
-    else
-      :ok
-    end
+    if name in Concept.list_all(), do: {:error, :already_exists}, else: :ok
   end
 
   defp register_missing_concepts(concepts) do
     existing = MapSet.new(Concept.list_all())
     missing = Enum.reject(concepts, fn c -> MapSet.member?(existing, c.name) end)
-
-    if missing == [] do
-      :ok
-    else
-      Concept.register_all(missing)
-    end
+    if missing == [], do: :ok, else: Concept.register_all(missing)
   end
 
   defp ensure_concepts_file!(path) do
@@ -348,17 +288,10 @@ defmodule Wetware.Resonance do
 
       updated =
         Map.put(concepts, concept.name, %{
-          "cx" => concept.cx,
-          "cy" => concept.cy,
-          "r" => concept.r,
           "tags" => concept.tags
         })
 
-      File.write!(
-        concepts_path,
-        Jason.encode!(Map.put(decoded, "concepts", updated), pretty: true)
-      )
-
+      File.write!(concepts_path, Jason.encode!(Map.put(decoded, "concepts", updated), pretty: true))
       :ok
     else
       {:error, reason} -> {:error, reason}
@@ -371,11 +304,7 @@ defmodule Wetware.Resonance do
       concepts = Map.get(decoded, "concepts", %{})
       updated = Map.delete(concepts, name)
 
-      File.write!(
-        concepts_path,
-        Jason.encode!(Map.put(decoded, "concepts", updated), pretty: true)
-      )
-
+      File.write!(concepts_path, Jason.encode!(Map.put(decoded, "concepts", updated), pretty: true))
       :ok
     else
       {:error, reason} -> {:error, reason}
