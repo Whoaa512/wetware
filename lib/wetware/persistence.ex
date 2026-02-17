@@ -7,9 +7,9 @@ defmodule Wetware.Persistence do
   for the full grid.
   """
 
-  alias Wetware.{Cell, Gel, Params}
+  alias Wetware.{Cell, DataPaths, Gel, Params}
 
-  @default_path Path.expand("~/nova/projects/digital-wetware/gel_state_ex.json")
+  @default_path DataPaths.gel_state_path()
 
   @doc "Save the current gel state to a JSON file."
   def save(path \\ @default_path) do
@@ -181,7 +181,10 @@ defmodule Wetware.Persistence do
         assoc_data -> Wetware.Associations.import(assoc_data)
       end
 
-      IO.puts("   ✓ Restored #{restored} cells from #{state["version"] || "unknown"} (step #{step_count})")
+      IO.puts(
+        "   ✓ Restored #{restored} cells from #{state["version"] || "unknown"} (step #{step_count})"
+      )
+
       :ok
     end
   end

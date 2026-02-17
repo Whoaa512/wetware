@@ -10,13 +10,11 @@ defmodule Wetware.Gel do
 
   use GenServer
 
-  alias Wetware.{Cell, Params}
+  alias Wetware.{Cell, Params, Resonance}
 
-  defstruct [
-    params: %Params{},
-    step_count: 0,
-    started: false
-  ]
+  defstruct params: %Params{},
+            step_count: 0,
+            started: false
 
   # ── Client API ──────────────────────────────────────────────
 
@@ -168,6 +166,7 @@ defmodule Wetware.Gel do
     Task.await_many(tasks, 30_000)
 
     new_count = state.step_count + 1
+    Resonance.observe_step(new_count)
     {:reply, {:ok, new_count}, %{state | step_count: new_count}}
   end
 

@@ -24,7 +24,7 @@ defmodule Wetware.Replay do
       memory_dir
       |> Path.join("*.md")
       |> Path.wildcard()
-      |> Enum.filter(&(Regex.match?(~r/\d{4}-\d{2}-\d{2}\.md$/, &1)))
+      |> Enum.filter(&Regex.match?(~r/\d{4}-\d{2}-\d{2}\.md$/, &1))
       |> Enum.sort()
 
     if files == [] do
@@ -88,6 +88,7 @@ defmodule Wetware.Replay do
 
         # 3. Imprint matched concepts
         matched_names = Enum.map(matches, fn {name, _} -> name end)
+
         Enum.each(matches, fn {name, count} ->
           strength = mention_strength(count) * dilution
           Concept.stimulate(name, strength)
@@ -120,7 +121,9 @@ defmodule Wetware.Replay do
           |> Enum.map(fn {name, c} -> "#{name} #{Float.round(c, 2)}" end)
           |> Enum.join(", ")
 
-        IO.puts("📅 #{date} (day #{day_num}/#{total_days}, gap: #{gap_days}d, decay: #{decay_steps} steps)")
+        IO.puts(
+          "📅 #{date} (day #{day_num}/#{total_days}, gap: #{gap_days}d, decay: #{decay_steps} steps)"
+        )
 
         if concepts_str != "" do
           IO.puts("   Concepts: #{concepts_str}")
@@ -192,6 +195,7 @@ defmodule Wetware.Replay do
       # Count tag mentions — but only meaningful tags
       # Skip very short/generic tags that cause false positives
       skip_tags = ~w(ai app build art care home x cli pan list gel zero nova fti)
+
       tag_count =
         tags
         |> Enum.reject(fn tag -> tag in skip_tags or String.length(tag) <= 2 end)
@@ -256,19 +260,23 @@ defmodule Wetware.Replay do
 
     if crystallized != [] do
       IO.puts("  💎 CRYSTALLIZED:")
+
       Enum.each(crystallized, fn {name, c} ->
         bar = String.duplicate("█", trunc(c * 30))
         IO.puts("    #{String.pad_trailing(name, 25)} #{bar} #{Float.round(c, 3)}")
       end)
+
       IO.puts("")
     end
 
     if active != [] do
       IO.puts("  ⚡ ACTIVE:")
+
       Enum.each(active, fn {name, c} ->
         bar = String.duplicate("█", trunc(c * 30))
         IO.puts("    #{String.pad_trailing(name, 25)} #{bar} #{Float.round(c, 3)}")
       end)
+
       IO.puts("")
     end
 

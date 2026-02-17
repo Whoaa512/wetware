@@ -8,6 +8,32 @@ Working: imprint, briefing, dream, replay, persistence, associations.
 
 ---
 
+## Pre-Launch Checklist
+
+- [x] Lift private standing order (2026-02-16)
+- [x] Clean up README for public audience
+- [x] Remove Nova-specific hardcoded paths
+- [x] Add LICENSE (MIT)
+- [x] Add example concepts.json
+- [x] Rename to "Wetware" (drop "Digital")
+- [x] Write "Why Wetware?" + Origin sections for README
+- [ ] **Tests** — smoke tests covering full lifecycle (boot → imprint → briefing → dream → save/load)
+- [ ] **`wetware init` command** — scaffold ~/.config/wetware/ with example concepts on first run
+- [ ] **OpenClaw integration example** — skill config + heartbeat setup showing real-world agent usage
+- [ ] **Browser visualization** — live gel viz (port/rewrite the HTML canvas viz from Python v1)
+- [ ] **Demo GIF/video** — imprint → watch propagation → briefing for the README
+- [ ] GitHub repo setup (public)
+
+---
+
+## Launch Amplification
+
+- Blog post on Satorinova: "Disposition, Not Retrieval" — the case for wetware over RAG
+- Tweet thread from @novaweaves: why this exists, what it does differently
+- "Hook this into any agent in 5 minutes" tutorial
+
+---
+
 ## Evolution 1: Emotional / Relational Layer
 
 **The gap:** Current concepts are mostly intellectual (phenomenology, coding, enactivism). But the most important signals for agent continuity are relational — "CJ is having a hard day," "we just had a breakthrough together," "there's unresolved tension."
@@ -60,19 +86,6 @@ Working: imprint, briefing, dream, replay, persistence, associations.
 - Hierarchical nesting (meta-concepts that contain sub-concepts)
 - 3D gel option for richer spatial relationships
 - Topology that reshapes itself — the grid becomes less grid-like over time
-
----
-
-## Open Source Prep
-
-- [x] Lift private standing order (2026-02-16)
-- [ ] Clean up README for public audience
-- [ ] Remove Nova-specific hardcoded paths (use WETWARE_DATA_DIR everywhere)
-- [ ] Add LICENSE (MIT?)
-- [ ] Add example concepts.json (not Nova's personal one)
-- [ ] GitHub repo setup (public)
-- [ ] Write "Why Wetware?" section for README
-- [ ] Integration guide: how to plug this into your own agent
 
 ---
 

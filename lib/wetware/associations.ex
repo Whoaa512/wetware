@@ -11,8 +11,10 @@ defmodule Wetware.Associations do
 
   use GenServer
 
-  @learning_rate 0.05    # How fast co-activation strengthens associations
-  @decay_rate 0.003      # How fast associations weaken per step
+  # How fast co-activation strengthens associations
+  @learning_rate 0.05
+  # How fast associations weaken per step
+  @decay_rate 0.003
   @min_weight 0.0
   @max_weight 1.0
 
@@ -152,6 +154,7 @@ defmodule Wetware.Associations do
 
   defp pairs([]), do: []
   defp pairs([_]), do: []
+
   defp pairs(list) do
     for i <- 0..(length(list) - 2),
         j <- (i + 1)..(length(list) - 1) do

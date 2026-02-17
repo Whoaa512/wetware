@@ -15,12 +15,12 @@ defmodule Wetware.Concept do
   defstruct [:name, :cx, :cy, :r, tags: []]
 
   @type t :: %__MODULE__{
-    name: String.t(),
-    cx: non_neg_integer(),
-    cy: non_neg_integer(),
-    r: non_neg_integer(),
-    tags: [String.t()]
-  }
+          name: String.t(),
+          cx: non_neg_integer(),
+          cy: non_neg_integer(),
+          r: non_neg_integer(),
+          tags: [String.t()]
+        }
 
   # ── Client API ──────────────────────────────────────────────
 

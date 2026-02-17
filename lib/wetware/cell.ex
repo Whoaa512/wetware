@@ -14,22 +14,24 @@ defmodule Wetware.Cell do
   alias Wetware.Params
 
   defstruct [
-    :x, :y,
+    :x,
+    :y,
     charge: 0.0,
-    neighbors: %{},       # %{{dx, dy} => {pid, weight, crystallized}}
+    # %{{dx, dy} => {pid, weight, crystallized}}
+    neighbors: %{},
     params: %Params{},
     step_epoch: 0
   ]
 
   @type neighbor_info :: {pid(), float(), boolean()}
   @type t :: %__MODULE__{
-    x: non_neg_integer(),
-    y: non_neg_integer(),
-    charge: float(),
-    neighbors: %{optional({integer(), integer()}) => neighbor_info()},
-    params: Params.t(),
-    step_epoch: non_neg_integer()
-  }
+          x: non_neg_integer(),
+          y: non_neg_integer(),
+          charge: float(),
+          neighbors: %{optional({integer(), integer()}) => neighbor_info()},
+          params: Params.t(),
+          step_epoch: non_neg_integer()
+        }
 
   # ── Client API ──────────────────────────────────────────────
 
@@ -212,10 +214,11 @@ defmodule Wetware.Cell do
         {offset, {pid, new_weight, crystallized}}
       end)
 
-    %{state |
-      charge: clamp(decayed_charge, 0.0, 1.0),
-      neighbors: neighbors,
-      step_epoch: state.step_epoch + 1
+    %{
+      state
+      | charge: clamp(decayed_charge, 0.0, 1.0),
+        neighbors: neighbors,
+        step_epoch: state.step_epoch + 1
     }
   end
 
