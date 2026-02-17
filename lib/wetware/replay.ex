@@ -1,4 +1,4 @@
-defmodule DigitalWetware.Replay do
+defmodule Wetware.Replay do
   @moduledoc """
   Replay Nova's memory through the gel — speed-run history.
 
@@ -7,7 +7,7 @@ defmodule DigitalWetware.Replay do
   and dreams after each day.
   """
 
-  alias DigitalWetware.{Concept, Gel}
+  alias Wetware.{Concept, Gel}
 
   @doc """
   Run the full replay over a memory directory.
@@ -70,7 +70,7 @@ defmodule DigitalWetware.Replay do
           Gel.step(decay_steps)
           # Decay associations proportionally (1 decay per 10 gel steps)
           assoc_decay = max(1, div(decay_steps, 10))
-          DigitalWetware.Associations.decay(assoc_decay)
+          Wetware.Associations.decay(assoc_decay)
         end
 
         # 2. Extract concepts from text
@@ -95,7 +95,7 @@ defmodule DigitalWetware.Replay do
 
         # Record co-activation for all concepts mentioned together
         if length(matched_names) >= 2 do
-          DigitalWetware.Associations.co_activate(matched_names)
+          Wetware.Associations.co_activate(matched_names)
         end
 
         # Run 5 propagation steps after imprinting
@@ -277,7 +277,7 @@ defmodule DigitalWetware.Replay do
     top_concepts = active |> Enum.take(5) |> Enum.map(fn {name, _} -> name end)
 
     Enum.each(top_concepts, fn name ->
-      assocs = DigitalWetware.Associations.get(name, 3)
+      assocs = Wetware.Associations.get(name, 3)
 
       if assocs != [] do
         assoc_str =
@@ -316,11 +316,11 @@ defmodule DigitalWetware.Replay do
     end
 
     # Save state
-    DigitalWetware.Persistence.save(state_path)
+    Wetware.Persistence.save(state_path)
     IO.puts("  ✓ State saved to #{state_path}")
 
     # Print full briefing
     IO.puts("")
-    DigitalWetware.Resonance.print_briefing()
+    Wetware.Resonance.print_briefing()
   end
 end

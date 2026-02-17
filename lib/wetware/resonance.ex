@@ -1,4 +1,4 @@
-defmodule DigitalWetware.Resonance do
+defmodule Wetware.Resonance do
   @moduledoc """
   The main API for the digital wetware.
 
@@ -8,7 +8,7 @@ defmodule DigitalWetware.Resonance do
   "Holding for memories. Shifting for thoughts."
   """
 
-  alias DigitalWetware.{Concept, Gel, Persistence}
+  alias Wetware.{Concept, Gel, Persistence}
 
   @concepts_path Path.expand("~/nova/projects/digital-wetware/concepts.json")
 
@@ -191,7 +191,7 @@ defmodule DigitalWetware.Resonance do
 
     IO.puts("")
     IO.puts("═══════════════════════════════════════════")
-    IO.puts("  🧬 Digital Wetware — Resonance Briefing")
+    IO.puts("  🧬 Wetware — Resonance Briefing")
     IO.puts("═══════════════════════════════════════════")
     IO.puts("  Step: #{b.step_count}  |  Concepts: #{b.total_concepts}")
     IO.puts("")

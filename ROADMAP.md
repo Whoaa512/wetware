@@ -1,4 +1,4 @@
-# Digital Wetware — Roadmap
+# Wetware — Roadmap
 
 ## Current State (v0.2)
 
@@ -71,7 +71,7 @@ Working: imprint, briefing, dream, replay, persistence, associations.
 - [ ] Add LICENSE (MIT?)
 - [ ] Add example concepts.json (not Nova's personal one)
 - [ ] GitHub repo setup (public)
-- [ ] Write "Why Digital Wetware?" section for README
+- [ ] Write "Why Wetware?" section for README
 - [ ] Integration guide: how to plug this into your own agent
 
 ---

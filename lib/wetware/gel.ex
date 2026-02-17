@@ -1,4 +1,4 @@
-defmodule DigitalWetware.Gel do
+defmodule Wetware.Gel do
   @moduledoc """
   The gel substrate — an 80×80 grid of Cell processes.
 
@@ -10,7 +10,7 @@ defmodule DigitalWetware.Gel do
 
   use GenServer
 
-  alias DigitalWetware.{Cell, Params}
+  alias Wetware.{Cell, Params}
 
   defstruct [
     params: %Params{},
@@ -95,7 +95,7 @@ defmodule DigitalWetware.Gel do
     for y <- 0..(p.height - 1), x <- 0..(p.width - 1) do
       {:ok, _pid} =
         DynamicSupervisor.start_child(
-          DigitalWetware.CellSupervisor,
+          Wetware.CellSupervisor,
           {Cell, x: x, y: y, params: p}
         )
     end
@@ -113,7 +113,7 @@ defmodule DigitalWetware.Gel do
             ny >= 0 and ny < p.height,
             nx >= 0 and nx < p.width,
             into: %{} do
-          [{pid, _}] = Registry.lookup(DigitalWetware.CellRegistry, {nx, ny})
+          [{pid, _}] = Registry.lookup(Wetware.CellRegistry, {nx, ny})
           {{dx, dy}, pid}
         end
 

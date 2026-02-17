@@ -1,7 +1,7 @@
-defmodule DigitalWetwareTest do
+defmodule WetwareTest do
   use ExUnit.Case, async: false
 
-  alias DigitalWetware.{Cell, Gel, Concept, Resonance, Persistence, Params}
+  alias Wetware.{Cell, Gel, Concept, Resonance, Persistence, Params}
 
   # We need the app running for all tests
   # The application starts registries + supervisors automatically

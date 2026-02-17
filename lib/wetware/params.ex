@@ -1,4 +1,4 @@
-defmodule DigitalWetware.Params do
+defmodule Wetware.Params do
   @moduledoc """
   Physics parameters for the gel substrate.
   Same constants as the Python v1 — the underlying reality doesn't change,

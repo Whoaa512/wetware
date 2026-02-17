@@ -7,7 +7,7 @@ defmodule Mix.Tasks.Wetware.Dream do
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
-    DigitalWetware.boot()
+    Wetware.boot()
 
     {opts, _, _} =
       OptionParser.parse(args, strict: [steps: :integer, intensity: :float])
@@ -19,7 +19,7 @@ defmodule Mix.Tasks.Wetware.Dream do
         if opts[:intensity], do: Keyword.put(o, :intensity, opts[:intensity]), else: o
       end)
 
-    DigitalWetware.dream(dream_opts)
-    DigitalWetware.print_briefing()
+    Wetware.dream(dream_opts)
+    Wetware.print_briefing()
   end
 end

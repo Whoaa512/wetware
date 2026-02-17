@@ -7,7 +7,7 @@ defmodule Mix.Tasks.Wetware.Imprint do
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
-    DigitalWetware.boot()
+    Wetware.boot()
 
     {opts, positional, _} =
       OptionParser.parse(args, strict: [steps: :integer, strength: :float])
@@ -29,8 +29,8 @@ defmodule Mix.Tasks.Wetware.Imprint do
           if opts[:strength], do: Keyword.put(o, :strength, opts[:strength]), else: o
         end)
 
-      DigitalWetware.imprint(concepts, imprint_opts)
-      DigitalWetware.print_briefing()
+      Wetware.imprint(concepts, imprint_opts)
+      Wetware.print_briefing()
     end
   end
 end

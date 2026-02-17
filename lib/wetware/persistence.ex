@@ -1,4 +1,4 @@
-defmodule DigitalWetware.Persistence do
+defmodule Wetware.Persistence do
   @moduledoc """
   Save and load gel state to JSON.
 
@@ -7,7 +7,7 @@ defmodule DigitalWetware.Persistence do
   for the full grid.
   """
 
-  alias DigitalWetware.{Cell, Gel, Params}
+  alias Wetware.{Cell, Gel, Params}
 
   @default_path Path.expand("~/nova/projects/digital-wetware/gel_state_ex.json")
 
@@ -69,10 +69,10 @@ defmodule DigitalWetware.Persistence do
 
     # Build concepts state
     concepts =
-      DigitalWetware.Concept.list_all()
+      Wetware.Concept.list_all()
       |> Enum.map(fn name ->
-        info = DigitalWetware.Concept.info(name)
-        charge = DigitalWetware.Concept.charge(name)
+        info = Wetware.Concept.info(name)
+        charge = Wetware.Concept.charge(name)
 
         {name,
          %{
@@ -86,7 +86,7 @@ defmodule DigitalWetware.Persistence do
       |> Map.new()
 
     # Export co-activation associations
-    assoc_data = DigitalWetware.Associations.export()
+    assoc_data = Wetware.Associations.export()
 
     state = %{
       version: "elixir-v2",
@@ -178,7 +178,7 @@ defmodule DigitalWetware.Persistence do
       # Restore co-activation associations
       case state["associations"] do
         nil -> :ok
-        assoc_data -> DigitalWetware.Associations.import(assoc_data)
+        assoc_data -> Wetware.Associations.import(assoc_data)
       end
 
       IO.puts("   ✓ Restored #{restored} cells from #{state["version"] || "unknown"} (step #{step_count})")

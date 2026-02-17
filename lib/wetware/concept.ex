@@ -1,4 +1,4 @@
-defmodule DigitalWetware.Concept do
+defmodule Wetware.Concept do
   @moduledoc """
   A named concept that owns a circular region of the gel.
 
@@ -10,7 +10,7 @@ defmodule DigitalWetware.Concept do
 
   use GenServer
 
-  alias DigitalWetware.{Cell, Params}
+  alias Wetware.{Cell, Params}
 
   defstruct [:name, :cx, :cy, :r, tags: []]
 
@@ -29,7 +29,7 @@ defmodule DigitalWetware.Concept do
     GenServer.start_link(__MODULE__, concept, name: via(concept.name))
   end
 
-  def via(name), do: {:via, Registry, {DigitalWetware.ConceptRegistry, name}}
+  def via(name), do: {:via, Registry, {Wetware.ConceptRegistry, name}}
 
   @doc "Stimulate all cells in this concept's region."
   def stimulate(name, strength \\ 1.0) do
@@ -53,7 +53,7 @@ defmodule DigitalWetware.Concept do
 
   @doc "List all registered concepts."
   def list_all do
-    Registry.select(DigitalWetware.ConceptRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
+    Registry.select(Wetware.ConceptRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
     |> Enum.sort()
   end
 
@@ -90,7 +90,7 @@ defmodule DigitalWetware.Concept do
     Enum.each(concepts, fn concept ->
       {:ok, _} =
         DynamicSupervisor.start_child(
-          DigitalWetware.ConceptSupervisor,
+          Wetware.ConceptSupervisor,
           {__MODULE__, concept: concept}
         )
     end)

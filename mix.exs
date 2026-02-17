@@ -1,22 +1,22 @@
-defmodule DigitalWetware.MixProject do
+defmodule Wetware.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :digital_wetware,
+      app: :wetware,
       version: "0.2.0",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
-      escript: [main_module: DigitalWetware.CLI]
+      escript: [main_module: Wetware.CLI]
     ]
   end
 
   def application do
     [
       extra_applications: [:logger],
-      mod: {DigitalWetware.Application, []}
+      mod: {Wetware.Application, []}
     ]
   end
 

@@ -1,4 +1,4 @@
-defmodule DigitalWetware.Associations do
+defmodule Wetware.Associations do
   @moduledoc """
   Tracks co-activation associations between concepts.
 

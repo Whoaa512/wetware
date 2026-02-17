@@ -1,4 +1,4 @@
-defmodule DigitalWetware.Cell do
+defmodule Wetware.Cell do
   @moduledoc """
   A single cell in the gel substrate.
 
@@ -11,7 +11,7 @@ defmodule DigitalWetware.Cell do
 
   use GenServer
 
-  alias DigitalWetware.Params
+  alias Wetware.Params
 
   defstruct [
     :x, :y,
@@ -42,7 +42,7 @@ defmodule DigitalWetware.Cell do
   end
 
   @doc "Registry via-tuple for a cell at (x, y)."
-  def via(x, y), do: {:via, Registry, {DigitalWetware.CellRegistry, {x, y}}}
+  def via(x, y), do: {:via, Registry, {Wetware.CellRegistry, {x, y}}}
 
   @doc "Inject charge into this cell."
   def stimulate(pid, amount) when is_pid(pid) do

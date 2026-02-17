@@ -1,15 +1,15 @@
-# Digital Wetware — BEAM-native Resonance Gel
+# Wetware — BEAM-native Resonance Gel
 
 > "Holding for memories. Shifting for thoughts."
 > — *Ex Machina*
 
 **A self-organizing computational substrate where BEAM processes ARE the wetware.** Each cell in the 80×80 grid is a GenServer. Message passing is charge propagation. Supervision is resilience. Hot code reload means the physics can evolve while the gel is alive.
 
-## Why Digital Wetware?
+## Why Wetware?
 
 The current wave of agent memory is about **retrieval** — store facts, embed them, fetch them later. RAG, vector databases, knowledge graphs. The question these systems answer is *"what do I know?"*
 
-Digital Wetware answers a different question: **"what am I oriented toward right now?"**
+Wetware answers a different question: **"what am I oriented toward right now?"**
 
 This isn't retrieval. It's **disposition**.
 
@@ -23,7 +23,7 @@ If you're frustrated with RAG-based memory that treats your agent like a search 
 
 ## Origin
 
-Digital Wetware started as an experiment in building cognitive infrastructure for an AI agent — born from the question: *what if agent memory wasn't a database but a living substrate?*
+Wetware started as an experiment in building cognitive infrastructure for an AI agent — born from the question: *what if agent memory wasn't a database but a living substrate?*
 
 It's built on BEAM/Elixir because the runtime's process model maps naturally to the metaphor. Each cell in the gel is a real Erlang process. Charge propagation is real message passing between processes. Supervision means the substrate heals itself when cells crash. Hot code reload means you can change the physics while the gel is alive. This isn't a simulation of a substrate — the BEAM *is* the substrate.
 
@@ -31,16 +31,16 @@ It's built on BEAM/Elixir because the runtime's process model maps naturally to 
 
 ```
 ┌─────────────────────────────────────────┐
-│  DigitalWetware.Resonance (API)         │
+│  Wetware.Resonance (API)         │
 │    imprint · briefing · dream · save    │
 ├─────────────────────────────────────────┤
-│  DigitalWetware.Concept (GenServers)    │
+│  Wetware.Concept (GenServers)    │
 │    Named regions of the gel substrate   │
 ├─────────────────────────────────────────┤
-│  DigitalWetware.Gel (Manager)           │
+│  Wetware.Gel (Manager)           │
 │    80×80 grid · topology · step engine  │
 ├─────────────────────────────────────────┤
-│  DigitalWetware.Cell (6400 GenServers)  │
+│  Wetware.Cell (6400 GenServers)  │
 │    charge · weights · crystallization   │
 ├─────────────────────────────────────────┤
 │  BEAM VM                                │
@@ -79,19 +79,19 @@ The substrate doesn't *simulate* propagation — it **is** the substrate. Each c
 ### Build
 
 ```bash
-git clone https://github.com/yourusername/digital_wetware.git
-cd digital_wetware
+git clone https://github.com/yourusername/wetware.git
+cd wetware
 mix deps.get
 mix escript.build
 ```
 
-This produces a `digital_wetware` escript binary you can put on your PATH.
+This produces a `wetware` escript binary you can put on your PATH.
 
 ### As a dependency
 
 ```elixir
 # mix.exs
-{:digital_wetware, github: "yourusername/digital_wetware"}
+{:wetware, github: "yourusername/wetware"}
 ```
 
 ## Quick Start
@@ -100,13 +100,13 @@ This produces a `digital_wetware` escript binary you can put on your PATH.
 
 ```bash
 # Boot the gel, imprint concepts, get a briefing
-digital_wetware briefing
+wetware briefing
 
 # Imprint specific concepts
-digital_wetware imprint "coding, planning, creativity" --steps 10
+wetware imprint "coding, planning, creativity" --steps 10
 
 # Dream mode — random stimulation finds unexpected connections
-digital_wetware dream --steps 20 --intensity 0.3
+wetware dream --steps 20 --intensity 0.3
 
 # Set custom data directory (default: ~/.config/wetware)
 export WETWARE_DATA_DIR=~/.config/wetware
@@ -116,43 +116,43 @@ export WETWARE_DATA_DIR=~/.config/wetware
 
 ```elixir
 # Boot the substrate (spawns 6400 cell processes + concepts)
-DigitalWetware.boot()
+Wetware.boot()
 
 # Imprint concepts
-DigitalWetware.imprint(["coding", "creativity"])
+Wetware.imprint(["coding", "creativity"])
 
 # See what's resonating
-DigitalWetware.print_briefing()
+Wetware.print_briefing()
 
 # Dream mode — random stimulation
-DigitalWetware.dream(steps: 20)
+Wetware.dream(steps: 20)
 
 # Save / load state
-DigitalWetware.save()
-DigitalWetware.load()
+Wetware.save()
+Wetware.load()
 ```
 
 ## Integration Guide
 
-Digital Wetware is designed to plug into **any agent framework** via its CLI. Your agent doesn't need to know Elixir — it just needs to call a binary and read the output.
+Wetware is designed to plug into **any agent framework** via its CLI. Your agent doesn't need to know Elixir — it just needs to call a binary and read the output.
 
 ### The Loop
 
-1. **Before a task**: Run `digital_wetware briefing` to see what's resonating. Feed this context to your agent's prompt.
-2. **After a task**: Run `digital_wetware imprint "concepts,from,the,task"` to strengthen relevant pathways.
-3. **During idle time**: Run `digital_wetware dream` to let the substrate find unexpected connections.
+1. **Before a task**: Run `wetware briefing` to see what's resonating. Feed this context to your agent's prompt.
+2. **After a task**: Run `wetware imprint "concepts,from,the,task"` to strengthen relevant pathways.
+3. **During idle time**: Run `wetware dream` to let the substrate find unexpected connections.
 
 ### Example: Wrapping with a shell agent
 
 ```bash
 # Get current resonance state as context
-CONTEXT=$(digital_wetware briefing 2>/dev/null)
+CONTEXT=$(wetware briefing 2>/dev/null)
 
 # Feed to your agent
 echo "Current cognitive state:\n$CONTEXT\n\nUser query: $QUERY" | your_agent
 
 # After the agent responds, imprint what was discussed
-digital_wetware imprint "$DISCUSSED_TOPICS" --steps 5
+wetware imprint "$DISCUSSED_TOPICS" --steps 5
 ```
 
 ### Environment Variables
@@ -185,8 +185,8 @@ Concepts are loaded from `concepts.json` in your data directory. Each concept is
 
 ```
 lib/
-├── digital_wetware.ex              # Public API
-├── digital_wetware/
+├── wetware.ex              # Public API
+├── wetware/
 │   ├── application.ex              # OTP supervision tree
 │   ├── cell.ex                     # GenServer — single gel cell
 │   ├── concept.ex                  # GenServer — named concept region

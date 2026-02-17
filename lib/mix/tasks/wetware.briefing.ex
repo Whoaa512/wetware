@@ -7,7 +7,7 @@ defmodule Mix.Tasks.Wetware.Briefing do
   @impl Mix.Task
   def run(_args) do
     Mix.Task.run("app.start")
-    DigitalWetware.boot()
-    DigitalWetware.print_briefing()
+    Wetware.boot()
+    Wetware.print_briefing()
   end
 end

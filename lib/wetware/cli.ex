@@ -1,11 +1,11 @@
-defmodule DigitalWetware.CLI do
+defmodule Wetware.CLI do
   @moduledoc "CLI entrypoint for the wetware binary."
 
-  alias DigitalWetware.Resonance
+  alias Wetware.Resonance
 
   def main(argv) do
     # Ensure the application is started
-    Application.ensure_all_started(:digital_wetware)
+    Application.ensure_all_started(:wetware)
 
     # Set data dir for persistence/concepts
     data_dir =
@@ -71,7 +71,7 @@ defmodule DigitalWetware.CLI do
 
     crystals =
       try do
-        charges = DigitalWetware.Gel.get_charges()
+        charges = Wetware.Gel.get_charges()
         charges
         |> List.flatten()
         |> Enum.count(&(&1 > 0.5))
@@ -86,13 +86,13 @@ defmodule DigitalWetware.CLI do
 
   defp cmd_replay(memory_dir, concepts_path, state_path) do
     memory_dir = Path.expand(memory_dir)
-    DigitalWetware.Replay.run(memory_dir, concepts_path, state_path)
+    Wetware.Replay.run(memory_dir, concepts_path, state_path)
   end
 
   defp cmd_help do
     IO.puts("""
 
-    #{IO.ANSI.cyan()}🧬 wetware#{IO.ANSI.reset()} — Digital Wetware CLI
+    #{IO.ANSI.cyan()}🧬 wetware#{IO.ANSI.reset()} — Wetware CLI
 
     #{IO.ANSI.bright()}USAGE:#{IO.ANSI.reset()}
       wetware <command> [options]
