@@ -10,7 +10,7 @@ defmodule DigitalWetware.CLI do
     # Set data dir for persistence/concepts
     data_dir =
       System.get_env("WETWARE_DATA_DIR") ||
-        Path.expand("~/nova/projects/digital-wetware")
+        Path.expand("~/.config/wetware")
 
     concepts_path = Path.join(data_dir, "concepts.json")
 
@@ -106,7 +106,7 @@ defmodule DigitalWetware.CLI do
       help                        This help message
 
     #{IO.ANSI.bright()}ENVIRONMENT:#{IO.ANSI.reset()}
-      WETWARE_DATA_DIR   Path to data dir (default: ~/nova/projects/digital-wetware/)
+      WETWARE_DATA_DIR   Path to data dir (default: ~/.config/wetware)
     """)
   end
 end

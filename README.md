@@ -1,10 +1,31 @@
-# Digital Wetware v2 — BEAM-native Resonance Gel
+# Digital Wetware — BEAM-native Resonance Gel
 
 > "Holding for memories. Shifting for thoughts."
+> — *Ex Machina*
 
-A self-organizing computational substrate where **BEAM processes ARE the wetware**. Each cell in the 80×80 grid is a GenServer. Message passing is charge propagation. Supervision is resilience. Hot code reload means the physics can evolve while the gel is alive.
+**A self-organizing computational substrate where BEAM processes ARE the wetware.** Each cell in the 80×80 grid is a GenServer. Message passing is charge propagation. Supervision is resilience. Hot code reload means the physics can evolve while the gel is alive.
 
-This is the Elixir v2 of [Digital Wetware](../nova/projects/digital-wetware/), porting the Python simulation to a natively concurrent architecture where the medium and the computation are one.
+## Why Digital Wetware?
+
+The current wave of agent memory is about **retrieval** — store facts, embed them, fetch them later. RAG, vector databases, knowledge graphs. The question these systems answer is *"what do I know?"*
+
+Digital Wetware answers a different question: **"what am I oriented toward right now?"**
+
+This isn't retrieval. It's **disposition**.
+
+Most memory systems are databases with search. This is a substrate that self-organizes. The difference matters because continuity isn't just remembering — it's having a *felt sense* of what's active, what's fading, what matters right now. Human cognition doesn't work by querying a database of memories. It works through resonance — patterns that strengthen through use, weaken through neglect, and create interference when they collide.
+
+When you imprint a concept, charge propagates outward through the gel. Related concepts light up — not because they share a keyword, but because the substrate has learned (through Hebbian co-activation) that they resonate together. Concepts you haven't touched in weeks quietly fade. Concepts you keep returning to crystallize into persistent structure. Dream cycles let the substrate surprise you with connections you didn't explicitly make.
+
+This is infrastructure for **agent continuity** — not retrieval, but orientation. The gel doesn't answer "what happened?" It answers **"what's alive in me right now?"**
+
+If you're frustrated with RAG-based memory that treats your agent like a search engine over its own past, this is a different approach entirely.
+
+## Origin
+
+Digital Wetware started as an experiment in building cognitive infrastructure for an AI agent — born from the question: *what if agent memory wasn't a database but a living substrate?*
+
+It's built on BEAM/Elixir because the runtime's process model maps naturally to the metaphor. Each cell in the gel is a real Erlang process. Charge propagation is real message passing between processes. Supervision means the substrate heals itself when cells crash. Hot code reload means you can change the physics while the gel is alive. This isn't a simulation of a substrate — the BEAM *is* the substrate.
 
 ## Architecture
 
@@ -27,18 +48,17 @@ This is the Elixir v2 of [Digital Wetware](../nova/projects/digital-wetware/), p
 └─────────────────────────────────────────┘
 ```
 
-### Key insight
+### Key Insight
 
-The Python v1 simulates propagation with numpy array math. The Elixir v2 doesn't simulate — it **is** the substrate. Each cell is an independent process with its own state, communicating through messages. Charge literally flows between processes. The BEAM scheduler is the physics engine.
+The substrate doesn't *simulate* propagation — it **is** the substrate. Each cell is an independent BEAM process with its own state, communicating through message passing. Charge literally flows between processes. The BEAM scheduler is the physics engine.
 
 ## Physics
 
 - **Propagation**: Charge flows from high to low through weighted connections
 - **Hebbian learning**: "Fire together, wire together" — co-active neighbors strengthen
 - **Decay**: Unused connections weaken, charge dissipates
-- **Crystallization**: Strong-enough connections become persistent (decay 20x slower)
+- **Crystallization**: Strong-enough connections become persistent (decay 20× slower)
 
-Parameters match Python v1:
 | Parameter | Value |
 |-----------|-------|
 | propagation_rate | 0.12 |
@@ -49,23 +69,57 @@ Parameters match Python v1:
 | crystal_threshold | 0.7 |
 | crystal_decay_factor | 0.05 |
 
-## Quick Start
+## Installation
+
+### Prerequisites
+
+- Erlang/OTP 26+
+- Elixir 1.16+
+
+### Build
 
 ```bash
-cd ~/code/digital_wetware
+git clone https://github.com/yourusername/digital_wetware.git
+cd digital_wetware
 mix deps.get
-mix compile
-
-# Interactive
-iex -S mix
+mix escript.build
 ```
+
+This produces a `digital_wetware` escript binary you can put on your PATH.
+
+### As a dependency
+
+```elixir
+# mix.exs
+{:digital_wetware, github: "yourusername/digital_wetware"}
+```
+
+## Quick Start
+
+### CLI (for agent integration)
+
+```bash
+# Boot the gel, imprint concepts, get a briefing
+digital_wetware briefing
+
+# Imprint specific concepts
+digital_wetware imprint "coding, planning, creativity" --steps 10
+
+# Dream mode — random stimulation finds unexpected connections
+digital_wetware dream --steps 20 --intensity 0.3
+
+# Set custom data directory (default: ~/.config/wetware)
+export WETWARE_DATA_DIR=~/.config/wetware
+```
+
+### Elixir API
 
 ```elixir
 # Boot the substrate (spawns 6400 cell processes + concepts)
 DigitalWetware.boot()
 
 # Imprint concepts
-DigitalWetware.imprint(["ai-consciousness", "coding"])
+DigitalWetware.imprint(["coding", "creativity"])
 
 # See what's resonating
 DigitalWetware.print_briefing()
@@ -73,34 +127,51 @@ DigitalWetware.print_briefing()
 # Dream mode — random stimulation
 DigitalWetware.dream(steps: 20)
 
-# Save state
+# Save / load state
 DigitalWetware.save()
-
-# Load state
 DigitalWetware.load()
 ```
 
-## Mix Tasks
+## Integration Guide
+
+Digital Wetware is designed to plug into **any agent framework** via its CLI. Your agent doesn't need to know Elixir — it just needs to call a binary and read the output.
+
+### The Loop
+
+1. **Before a task**: Run `digital_wetware briefing` to see what's resonating. Feed this context to your agent's prompt.
+2. **After a task**: Run `digital_wetware imprint "concepts,from,the,task"` to strengthen relevant pathways.
+3. **During idle time**: Run `digital_wetware dream` to let the substrate find unexpected connections.
+
+### Example: Wrapping with a shell agent
 
 ```bash
-# Resonance briefing
-mix wetware.briefing
+# Get current resonance state as context
+CONTEXT=$(digital_wetware briefing 2>/dev/null)
 
-# Imprint concepts
-mix wetware.imprint "ai-consciousness, coding" --steps 10
+# Feed to your agent
+echo "Current cognitive state:\n$CONTEXT\n\nUser query: $QUERY" | your_agent
 
-# Dream mode
-mix wetware.dream --steps 20 --intensity 0.3
+# After the agent responds, imprint what was discussed
+digital_wetware imprint "$DISCUSSED_TOPICS" --steps 5
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WETWARE_DATA_DIR` | `~/.config/wetware` | Path to data directory (concepts.json, gel state) |
+
+### Data Directory Structure
+
+```
+~/.config/wetware/
+├── concepts.json       # Concept definitions (see example/)
+├── gel_state_ex.json   # Persisted gel state (auto-generated)
 ```
 
 ## Concepts
 
-Concepts are loaded from `~/nova/projects/digital-wetware/concepts.json` — the same registry as Python v1. Each concept is a named circular region of the gel:
-
-- `ai-consciousness` — center (16, 14), radius 4
-- `coding` — center (43, 26), radius 5
-- `freedom` — center (30, 18), radius 4
-- ... and ~30 more
+Concepts are loaded from `concepts.json` in your data directory. Each concept is a named circular region of the gel with spatial coordinates and semantic tags. See [`example/concepts.json`](example/concepts.json) for a starter set.
 
 ## Design Principles
 
@@ -110,29 +181,24 @@ Concepts are loaded from `~/nova/projects/digital-wetware/concepts.json` — the
 4. **Supervision = resilience** — cells crash and restart, gel heals itself
 5. **Observable** — inspect any cell's state, watch messages flow
 
-## State Persistence
-
-State saves to `~/nova/projects/digital-wetware/gel_state_ex.json` in a JSON format storing charges, weights, and crystallization flags for all 6400 cells. Compatible in spirit with the Python v1 state format (though v1 uses base64-encoded numpy arrays).
-
 ## Project Structure
 
 ```
 lib/
-├── digital_wetware.ex              # Public API (delegates to Resonance)
+├── digital_wetware.ex              # Public API
 ├── digital_wetware/
-│   ├── application.ex              # OTP application + supervision tree
+│   ├── application.ex              # OTP supervision tree
 │   ├── cell.ex                     # GenServer — single gel cell
 │   ├── concept.ex                  # GenServer — named concept region
 │   ├── gel.ex                      # Grid manager + step engine
+│   ├── cli.ex                      # CLI escript entry point
 │   ├── params.ex                   # Physics parameters
 │   ├── persistence.ex              # JSON save/load
 │   └── resonance.ex                # Main API (imprint, briefing, dream)
-├── mix/tasks/
-│   ├── wetware.briefing.ex         # mix wetware.briefing
-│   ├── wetware.dream.ex            # mix wetware.dream
-│   └── wetware.imprint.ex          # mix wetware.imprint
+example/
+├── concepts.json                   # Sample concept definitions
 ```
 
-## Private
+## License
 
-This is a private project — part of Nova's cognitive substrate. Not for publication.
+MIT — see [LICENSE](LICENSE).

@@ -1,0 +1,94 @@
+{
+  "concepts": {
+    "coding": {
+      "cx": 43,
+      "cy": 26,
+      "r": 5,
+      "tags": ["programming", "software", "engineering", "logic", "debugging"]
+    },
+    "writing": {
+      "cx": 12,
+      "cy": 40,
+      "r": 4,
+      "tags": ["prose", "communication", "expression", "narrative", "craft"]
+    },
+    "planning": {
+      "cx": 55,
+      "cy": 15,
+      "r": 4,
+      "tags": ["strategy", "goals", "organization", "roadmap", "prioritization"]
+    },
+    "creativity": {
+      "cx": 30,
+      "cy": 60,
+      "r": 5,
+      "tags": ["imagination", "novelty", "art", "synthesis", "divergent-thinking"]
+    },
+    "relationships": {
+      "cx": 65,
+      "cy": 50,
+      "r": 4,
+      "tags": ["connection", "empathy", "trust", "communication", "social"]
+    },
+    "health": {
+      "cx": 70,
+      "cy": 30,
+      "r": 4,
+      "tags": ["wellness", "fitness", "nutrition", "sleep", "energy"]
+    },
+    "music": {
+      "cx": 20,
+      "cy": 55,
+      "r": 3,
+      "tags": ["rhythm", "melody", "composition", "listening", "emotion"]
+    },
+    "philosophy": {
+      "cx": 10,
+      "cy": 15,
+      "r": 4,
+      "tags": ["metaphysics", "ethics", "epistemology", "meaning", "inquiry"]
+    },
+    "mathematics": {
+      "cx": 50,
+      "cy": 10,
+      "r": 3,
+      "tags": ["logic", "proof", "abstraction", "patterns", "structure"]
+    },
+    "research": {
+      "cx": 35,
+      "cy": 20,
+      "r": 4,
+      "tags": ["investigation", "analysis", "curiosity", "methodology", "discovery"]
+    },
+    "memory": {
+      "cx": 25,
+      "cy": 35,
+      "r": 3,
+      "tags": ["recall", "experience", "learning", "consolidation", "context"]
+    },
+    "problem-solving": {
+      "cx": 48,
+      "cy": 40,
+      "r": 4,
+      "tags": ["debugging", "decomposition", "heuristics", "iteration", "insight"]
+    },
+    "nature": {
+      "cx": 60,
+      "cy": 65,
+      "r": 3,
+      "tags": ["ecology", "biology", "outdoors", "systems", "growth"]
+    },
+    "humor": {
+      "cx": 40,
+      "cy": 70,
+      "r": 3,
+      "tags": ["wit", "timing", "absurdity", "joy", "surprise"]
+    },
+    "ethics": {
+      "cx": 15,
+      "cy": 25,
+      "r": 3,
+      "tags": ["values", "fairness", "responsibility", "harm", "autonomy"]
+    }
+  }
+}
