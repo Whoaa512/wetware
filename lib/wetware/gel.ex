@@ -8,6 +8,8 @@ defmodule Wetware.Gel do
   alias Wetware.{Cell, Params, Resonance}
   @reshape_interval 4
   @reshape_max_offset 4
+  @cluster_interval 8
+  @cluster_min_weight 0.12
 
   defstruct params: %Params{}, step_count: 0, started: false, concepts: %{}
 
@@ -249,9 +251,11 @@ defmodule Wetware.Gel do
         {result, next_state}
       end)
 
+    post_cluster_state = maybe_cluster_concepts(post_spawn_state, new_count)
+    Wetware.Associations.decay_step()
     Resonance.observe_step(new_count)
     Wetware.Gel.Lifecycle.tick(new_count)
-    {:reply, {:ok, new_count}, %{post_spawn_state | step_count: new_count}}
+    {:reply, {:ok, new_count}, %{post_cluster_state | step_count: new_count}}
   end
 
   def handle_call(:get_charges, _from, %{started: false} = state),
@@ -514,4 +518,87 @@ defmodule Wetware.Gel do
       end
     end)
   end
+
+  defp maybe_cluster_concepts(state, step_count) when rem(step_count, @cluster_interval) != 0,
+    do: state
+
+  defp maybe_cluster_concepts(state, _step_count) do
+    concept_names = state.concepts |> Map.keys() |> Enum.sort()
+
+    Enum.reduce(concept_names, state, fn name, acc_state ->
+      case Map.get(acc_state.concepts, name) do
+        %{center: {cx, cy}, r: r} = info ->
+          targets =
+            Wetware.Associations.get(name, 4)
+            |> Enum.filter(fn {other, weight} ->
+              weight >= @cluster_min_weight and Map.has_key?(acc_state.concepts, other)
+            end)
+
+          case cluster_target_center({cx, cy}, targets, acc_state.concepts) do
+            nil ->
+              acc_state
+
+            {tx, ty} ->
+              new_center = {cx + step_delta(tx - cx), cy + step_delta(ty - cy)}
+
+              if new_center == {cx, cy} or
+                   not concept_center_available?(name, new_center, r, acc_state.concepts) do
+                acc_state
+              else
+                moved_info = Map.put(info, :center, new_center)
+                moved_concepts = Map.put(acc_state.concepts, name, moved_info)
+                moved_state = %{acc_state | concepts: moved_concepts}
+                seed_concept_cells(name, moved_info, moved_state)
+              end
+          end
+
+        _ ->
+          acc_state
+      end
+    end)
+  end
+
+  defp cluster_target_center(_source_center, [], _concepts), do: nil
+
+  defp cluster_target_center({cx, cy}, targets, concepts) do
+    {sum_x, sum_y, total_weight} =
+      Enum.reduce(targets, {cx * 1.0, cy * 1.0, 1.0}, fn {other, weight}, {sx, sy, sw} ->
+        %{center: {ox, oy}} = Map.fetch!(concepts, other)
+        {sx + ox * weight, sy + oy * weight, sw + weight}
+      end)
+
+    {round(sum_x / total_weight), round(sum_y / total_weight)}
+  end
+
+  defp concept_center_available?(name, {x, y}, r, concepts) do
+    Enum.all?(concepts, fn
+      {^name, _info} ->
+        true
+
+      {_other, %{center: {ox, oy}, r: other_r}} ->
+        min_dist = r + other_r + 1
+        :math.sqrt((x - ox) * (x - ox) + (y - oy) * (y - oy)) >= min_dist
+    end)
+  end
+
+  defp seed_concept_cells(name, %{center: {cx, cy}, r: r}, state) do
+    concept_cells_for({cx, cy}, r)
+    |> Enum.reduce(state, fn coord, acc_state ->
+      {_result, next_state} =
+        ensure_cell_impl(coord, :concept_cluster_move, [kind: :concept, owner: name], acc_state)
+
+      next_state
+    end)
+  end
+
+  defp concept_cells_for({cx, cy}, r) do
+    for y <- (cy - r)..(cy + r),
+        x <- (cx - r)..(cx + r),
+        (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r,
+        do: {x, y}
+  end
+
+  defp step_delta(v) when v > 0, do: 1
+  defp step_delta(v) when v < 0, do: -1
+  defp step_delta(_), do: 0
 end

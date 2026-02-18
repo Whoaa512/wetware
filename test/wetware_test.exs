@@ -137,6 +137,31 @@ defmodule WetwareTest do
       assert Map.has_key?(Cell.get_state(a).neighbors, {3, 0})
       assert Map.has_key?(Cell.get_state(b).neighbors, {-3, 0})
     end
+
+    test "associated concepts cluster closer over time" do
+      a_name = unique_name("cluster-a")
+      b_name = unique_name("cluster-b")
+
+      _ = register_temp_concept(a_name, 700, 700, 2, ["cluster"])
+      _ = register_temp_concept(b_name, 730, 700, 2, ["cluster"])
+
+      [left, right] = Enum.sort([a_name, b_name])
+      assert :ok = Associations.import(%{"#{left}|#{right}" => 0.9})
+
+      before_a = Concept.info(a_name)
+      before_b = Concept.info(b_name)
+      before_distance = euclidean({before_a.cx, before_a.cy}, {before_b.cx, before_b.cy})
+
+      Enum.each(1..16, fn _ ->
+        assert {:ok, _} = Gel.step()
+      end)
+
+      after_a = Concept.info(a_name)
+      after_b = Concept.info(b_name)
+      after_distance = euclidean({after_a.cx, after_a.cy}, {after_b.cx, after_b.cy})
+
+      assert after_distance < before_distance
+    end
   end
 
   describe "Application wiring" do
@@ -687,6 +712,10 @@ defmodule WetwareTest do
       System.tmp_dir!(),
       "wetware_test_#{label}_#{System.unique_integer([:positive, :monotonic])}.json"
     )
+  end
+
+  defp euclidean({ax, ay}, {bx, by}) do
+    :math.sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by))
   end
 
   defp wait_until(fun, attempts \\ 30)

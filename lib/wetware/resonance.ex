@@ -77,6 +77,7 @@ defmodule Wetware.Resonance do
     steps = Keyword.get(opts, :steps, 5)
     strength = Keyword.get(opts, :strength, 1.0)
     valence = clamp(Keyword.get(opts, :valence, 0.0), -1.0, 1.0)
+    Wetware.Associations.co_activate(concept_names)
 
     Enum.each(concept_names, fn name ->
       effective_strength = strength * EmotionalBias.strength_multiplier(name)
