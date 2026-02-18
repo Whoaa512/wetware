@@ -161,6 +161,55 @@ wetware imprint "$DISCUSSED_TOPICS" --steps 5
 |----------|---------|-------------|
 | `WETWARE_DATA_DIR` | `~/.config/wetware` | Path to data directory (concepts.json, gel state) |
 
+### OpenClaw integration example
+
+This repo includes a practical OpenClaw setup under `example/openclaw/`:
+
+- Skill: `example/openclaw/skills/wetware-memory/SKILL.md`
+- Config snippet: `example/openclaw/openclaw.example.json5`
+- Heartbeat helper: `scripts/openclaw_wetware_heartbeat.sh`
+
+#### 1) Install the skill in your OpenClaw workspace
+
+```bash
+mkdir -p <openclaw-workspace>/skills
+cp -R example/openclaw/skills/wetware-memory <openclaw-workspace>/skills/
+```
+
+#### 2) Enable the skill in `~/.openclaw/openclaw.json`
+
+Merge this shape (see `example/openclaw/openclaw.example.json5`):
+
+```json5
+{
+  skills: {
+    entries: {
+      "wetware-memory": {
+        enabled: true,
+        env: {
+          WETWARE_DATA_DIR: "~/.config/wetware"
+        }
+      }
+    }
+  }
+}
+```
+
+#### 3) Enable heartbeats + send wetware updates
+
+```bash
+openclaw system heartbeat enable
+./scripts/openclaw_wetware_heartbeat.sh
+```
+
+The script packages `wetware briefing` output into a system event and schedules it for the next heartbeat cycle.
+
+#### 4) Optional: immediate wake-up event after major tasks
+
+```bash
+openclaw system event --mode now --text "Wetware: completed task, imprinting key concepts now."
+```
+
 ### Data Directory Structure
 
 ```
