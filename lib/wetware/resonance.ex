@@ -183,6 +183,25 @@ defmodule Wetware.Resonance do
     |> Enum.sort_by(&(-&1.charge))
   end
 
+  def priming_payload do
+    briefing = briefing()
+    tokens = Priming.tokens_from_briefing(briefing)
+    prompt_block = Priming.prompt_block(briefing)
+
+    %{
+      generated_at: DateTime.utc_now() |> DateTime.to_iso8601(),
+      tokens: tokens,
+      disposition_hints: briefing.disposition_hints,
+      prompt_block: prompt_block,
+      transparent: true,
+      override_keys:
+        briefing.disposition_hints
+        |> Enum.map(fn hint -> Map.get(hint, :override_key) || Map.get(hint, "override_key") end)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.uniq()
+    }
+  end
+
   def dormancy(name, opts \\ []) do
     threshold = Keyword.get(opts, :threshold, 0.05)
     ensure_dormancy_table!()

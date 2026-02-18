@@ -20,6 +20,48 @@ defmodule Wetware.Priming do
     |> Enum.reject(&is_nil/1)
   end
 
+  @doc """
+  Render compact priming tokens from a briefing payload.
+  """
+  def tokens_from_briefing(%{disposition_hints: hints}) when is_list(hints) do
+    Enum.map(hints, fn hint ->
+      id = Map.get(hint, :id) || Map.get(hint, "id") || "hint"
+      orientation = Map.get(hint, :orientation) || Map.get(hint, "orientation") || "none"
+      confidence = Map.get(hint, :confidence) || Map.get(hint, "confidence") || 0.0
+      "WW_PRIME:#{id}|orientation=#{orientation}|confidence=#{Float.round(confidence, 4)}"
+    end)
+  end
+
+  def tokens_from_briefing(_), do: []
+
+  @doc """
+  Render a transparent prompt block suitable for system prompt injection.
+  """
+  def prompt_block(%{disposition_hints: hints} = briefing) do
+    tokens = tokens_from_briefing(briefing)
+
+    lines =
+      hints
+      |> Enum.map(fn hint ->
+        id = Map.get(hint, :id) || Map.get(hint, "id")
+        text = Map.get(hint, :prompt_hint) || Map.get(hint, "prompt_hint")
+        confidence = Map.get(hint, :confidence) || Map.get(hint, "confidence") || 0.0
+        "- #{id}: #{text} (confidence=#{Float.round(confidence, 4)})"
+      end)
+
+    """
+    [WETWARE_PRIMING_BEGIN]
+    #{Enum.join(tokens, "\n")}
+
+    Suggestions:
+    #{Enum.join(lines, "\n")}
+    [WETWARE_PRIMING_END]
+    """
+    |> String.trim()
+  end
+
+  def prompt_block(_), do: "[WETWARE_PRIMING_BEGIN]\n[WETWARE_PRIMING_END]"
+
   defp gentleness_hint(by_name) do
     kindness = strongest_by_tags(by_name, @kindness_tags)
     conflict = strongest_by_tags(by_name, @conflict_tags)

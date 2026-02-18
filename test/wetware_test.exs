@@ -387,6 +387,17 @@ defmodule WetwareTest do
       assert is_list(b.disposition_hints)
     end
 
+    test "priming payload provides transparent tokens and prompt block" do
+      payload = Resonance.priming_payload()
+
+      assert is_list(payload.tokens)
+      assert is_list(payload.disposition_hints)
+      assert is_binary(payload.prompt_block)
+      assert payload.transparent == true
+      assert is_list(payload.override_keys)
+      assert String.contains?(payload.prompt_block, "[WETWARE_PRIMING_BEGIN]")
+    end
+
     test "dream mode advances steps and returns echoes" do
       before = Gel.step_count()
       result = Resonance.dream(steps: 3, intensity: 0.4)

@@ -36,6 +36,7 @@ defmodule Wetware.CLI do
       ["replay", memory_dir | _] -> cmd_replay(memory_dir, concepts_path, gel_state_path)
       ["status" | _] -> cmd_status()
       ["concepts" | _] -> cmd_concepts()
+      ["priming" | rest] -> cmd_priming(rest)
       ["discover" | rest] -> cmd_discover(rest)
       ["prune" | rest] -> cmd_prune(rest)
       ["auto-imprint", input | rest] -> cmd_auto_imprint(input, rest, gel_state_path)
@@ -197,6 +198,22 @@ defmodule Wetware.CLI do
     end)
   end
 
+  defp cmd_priming(rest) do
+    {opts, _, _} = OptionParser.parse(rest, strict: [format: :string])
+    format = Keyword.get(opts, :format, "text")
+    payload = Resonance.priming_payload()
+
+    case format do
+      "json" ->
+        IO.puts(Jason.encode!(payload, pretty: true))
+
+      _ ->
+        IO.puts(payload.prompt_block)
+        IO.puts("")
+        IO.puts("Override keys: #{Enum.join(payload.override_keys, ", ")}")
+    end
+  end
+
   defp cmd_discover(["--pending" | _]) do
     Discovery.pending()
     |> Enum.each(fn item ->
@@ -354,6 +371,7 @@ defmodule Wetware.CLI do
       init                            Set up data dir with empty concepts.json
       briefing                        Show resonance briefing
       concepts                        List concepts and charge levels
+      priming [--format json]         Generate transparent priming tokens
       imprint \"concept1, concept2\"    Stimulate concepts (--steps/--strength/--valence)
       dream [--steps N]               Run dream mode
       discover <text_or_file>         Scan for pending concepts
