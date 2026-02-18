@@ -10,6 +10,9 @@ defmodule Wetware.Gel do
   @reshape_max_offset 4
   @cluster_interval 8
   @cluster_min_weight 0.12
+  @region_adapt_interval 10
+  @region_min_radius 2
+  @region_max_radius 7
 
   defstruct params: %Params{}, step_count: 0, started: false, concepts: %{}
 
@@ -252,10 +255,11 @@ defmodule Wetware.Gel do
       end)
 
     post_cluster_state = maybe_cluster_concepts(post_spawn_state, new_count)
+    post_region_state = maybe_adapt_concept_regions(post_cluster_state, new_count)
     Wetware.Associations.decay_step()
     Resonance.observe_step(new_count)
     Wetware.Gel.Lifecycle.tick(new_count)
-    {:reply, {:ok, new_count}, %{post_cluster_state | step_count: new_count}}
+    {:reply, {:ok, new_count}, %{post_region_state | step_count: new_count}}
   end
 
   def handle_call(:get_charges, _from, %{started: false} = state),
@@ -601,4 +605,64 @@ defmodule Wetware.Gel do
   defp step_delta(v) when v > 0, do: 1
   defp step_delta(v) when v < 0, do: -1
   defp step_delta(_), do: 0
+
+  defp maybe_adapt_concept_regions(state, step_count)
+       when rem(step_count, @region_adapt_interval) != 0,
+       do: state
+
+  defp maybe_adapt_concept_regions(state, _step_count) do
+    strategy = Wetware.Layout.Engine.strategy()
+    concept_names = state.concepts |> Map.keys() |> Enum.sort()
+
+    Enum.reduce(concept_names, state, fn name, acc_state ->
+      case Map.get(acc_state.concepts, name) do
+        %{r: radius} = info ->
+          usage = safe_concept_charge(name)
+          dormancy = safe_dormant_steps(name)
+
+          next_radius =
+            cond do
+              radius < @region_max_radius and strategy.should_grow?(name, usage) ->
+                radius + 1
+
+              radius > @region_min_radius and strategy.should_shrink?(name, dormancy) ->
+                radius - 1
+
+              true ->
+                radius
+            end
+
+          if next_radius == radius do
+            acc_state
+          else
+            next_info = Map.put(info, :r, next_radius)
+            next_concepts = Map.put(acc_state.concepts, name, next_info)
+
+            seeded_state =
+              seed_concept_cells(name, next_info, %{acc_state | concepts: next_concepts})
+
+            seeded_state
+          end
+
+        _ ->
+          acc_state
+      end
+    end)
+  end
+
+  defp safe_concept_charge(name) do
+    try do
+      Wetware.Concept.charge(name)
+    catch
+      :exit, _ -> 0.0
+    end
+  end
+
+  defp safe_dormant_steps(name) do
+    try do
+      Wetware.Resonance.dormancy(name).dormant_steps
+    catch
+      :exit, _ -> 0
+    end
+  end
 end

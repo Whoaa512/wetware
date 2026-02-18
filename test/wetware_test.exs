@@ -162,6 +162,20 @@ defmodule WetwareTest do
 
       assert after_distance < before_distance
     end
+
+    test "dynamic concept regions grow for frequently used concepts" do
+      name = unique_name("region-grow")
+      _ = register_temp_concept(name, 760, 760, 2, ["adaptive"])
+
+      assert Concept.info(name).r == 2
+
+      Enum.each(1..10, fn _ ->
+        Concept.stimulate(name, 1.0)
+        assert {:ok, _} = Gel.step()
+      end)
+
+      assert Concept.info(name).r >= 3
+    end
   end
 
   describe "Application wiring" do
