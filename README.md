@@ -110,6 +110,9 @@ wetware dream --steps 20 --intensity 0.3
 
 # Set custom data directory (default: ~/.config/wetware)
 export WETWARE_DATA_DIR=~/.config/wetware
+
+# Optional: denser 3D-like projected neighborhood topology
+WETWARE_TOPOLOGY=3d wetware briefing
 ```
 
 ### Elixir API

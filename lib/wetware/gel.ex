@@ -12,7 +12,11 @@ defmodule Wetware.Gel do
   defstruct params: %Params{}, step_count: 0, started: false, concepts: %{}
 
   def start_link(opts \\ []) do
-    params = Keyword.get(opts, :params, Params.default())
+    params =
+      opts
+      |> Keyword.get(:params, Params.default())
+      |> Params.with_topology_from_env()
+
     GenServer.start_link(__MODULE__, params, name: __MODULE__)
   end
 
@@ -173,7 +177,7 @@ defmodule Wetware.Gel do
     do: {:reply, {:error, :not_booted}, state}
 
   def handle_call(:step, _from, state) do
-    base_offsets = Params.neighbor_offsets()
+    base_offsets = Params.neighbor_offsets(state.params)
     cells = Wetware.Gel.Index.list_cells()
 
     {signal_map, cell_state_map} =
@@ -349,14 +353,14 @@ defmodule Wetware.Gel do
         case DynamicSupervisor.start_child(sup, child_spec) do
           {:ok, pid} ->
             :ok = Wetware.Gel.Index.put_cell(coord, pid)
-            wire_neighbors(coord, pid)
+            wire_neighbors(coord, pid, state.params)
             maybe_restore_snapshot(pid, snapshot)
             maybe_apply_cell_attrs(pid, opts)
             {{:ok, pid}, state}
 
           {:error, {:already_started, pid}} ->
             :ok = Wetware.Gel.Index.put_cell(coord, pid)
-            wire_neighbors(coord, pid)
+            wire_neighbors(coord, pid, state.params)
             maybe_restore_snapshot(pid, snapshot)
             maybe_apply_cell_attrs(pid, opts)
             {{:ok, pid}, state}
@@ -446,8 +450,8 @@ defmodule Wetware.Gel do
     |> Enum.uniq()
   end
 
-  defp wire_neighbors({x, y}, pid) do
-    Enum.each(Params.neighbor_offsets(), fn {dy, dx} ->
+  defp wire_neighbors({x, y}, pid, params) do
+    Enum.each(Params.neighbor_offsets(params), fn {dy, dx} ->
       ncoord = {x + dx, y + dy}
 
       case Wetware.Gel.Index.cell_pid(ncoord) do

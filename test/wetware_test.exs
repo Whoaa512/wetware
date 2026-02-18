@@ -67,6 +67,21 @@ defmodule WetwareTest do
     end
   end
 
+  describe "Topology modes" do
+    test "3d mode exposes a denser neighborhood than 2d mode" do
+      p2 = %Params{topology_mode: :grid2d}
+      p3 = %Params{topology_mode: :gel3d}
+
+      offsets2 = Params.neighbor_offsets(p2)
+      offsets3 = Params.neighbor_offsets(p3)
+
+      assert length(offsets2) == 8
+      assert length(offsets3) > length(offsets2)
+      assert {2, 0} in offsets3
+      assert {-2, -2} in offsets3
+    end
+  end
+
   describe "Sparse Gel" do
     test "boot is idempotent" do
       before = Registry.count(Wetware.CellRegistry)
