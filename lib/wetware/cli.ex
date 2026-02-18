@@ -1,7 +1,7 @@
 defmodule Wetware.CLI do
   @moduledoc "CLI entrypoint for the wetware binary."
 
-  alias Wetware.{AutoImprint, DataPaths, Discovery, PrimingOverrides, Pruning, Resonance, Viz}
+  alias Wetware.{AutoImprint, DataPaths, Discovery, Introspect, PrimingOverrides, Pruning, Resonance, Viz}
 
   def main(argv) do
     Application.ensure_all_started(:wetware)
@@ -36,6 +36,7 @@ defmodule Wetware.CLI do
       ["replay", memory_dir | _] -> cmd_replay(memory_dir, concepts_path, gel_state_path)
       ["status" | _] -> cmd_status()
       ["concepts" | _] -> cmd_concepts()
+      ["introspect" | rest] -> cmd_introspect(rest)
       ["priming" | rest] -> cmd_priming(rest)
       ["discover" | rest] -> cmd_discover(rest)
       ["prune" | rest] -> cmd_prune(rest)
@@ -187,6 +188,18 @@ defmodule Wetware.CLI do
     IO.puts("  Hot cells: #{hot_cells}")
     IO.puts(IO.ANSI.cyan() <> "======================" <> IO.ANSI.reset())
     IO.puts("")
+  end
+
+  defp cmd_introspect(rest) do
+    {opts, _, _} = OptionParser.parse(rest, strict: [top: :integer, json: :boolean])
+
+    if opts[:json] do
+      report = Introspect.report()
+      IO.puts(Jason.encode!(report, pretty: true))
+    else
+      top = Keyword.get(opts, :top, 10)
+      Introspect.print_report(top: top)
+    end
   end
 
   defp cmd_concepts do
@@ -391,6 +404,7 @@ defmodule Wetware.CLI do
       init                            Set up data dir with empty concepts.json
       briefing                        Show resonance briefing
       concepts                        List concepts and charge levels
+      introspect [--top N] [--json]     Deep self-examination of gel state
       priming [--format json]         Generate transparent priming tokens
       priming --disable <key>         Disable a priming orientation
       priming --enable <key>          Re-enable a priming orientation

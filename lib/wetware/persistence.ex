@@ -25,21 +25,43 @@ defmodule Wetware.Persistence do
 
     cell_map = Map.merge(snapshot_map, live_map)
 
-    concepts =
-      Gel.concepts()
-      |> Enum.map(fn {name, info} ->
-        {cx, cy} = info.center
+    # Build concepts from Gel state; fall back to Concept GenServers if Gel map is empty
+    gel_concepts = Gel.concepts()
 
-        {name,
-         %{
-           "center" => [cx, cy],
-           "r" => info.r,
-           "tags" => info.tags,
-           "parent" => Map.get(info, :parent),
-           "charge" => Float.round(safe_concept_charge(name), 6)
-         }}
-      end)
-      |> Map.new()
+    concepts =
+      if map_size(gel_concepts) > 0 do
+        gel_concepts
+        |> Enum.map(fn {name, info} ->
+          {cx, cy} = info.center
+
+          {name,
+           %{
+             "center" => [cx, cy],
+             "r" => info.r,
+             "tags" => info.tags,
+             "parent" => Map.get(info, :parent),
+             "charge" => Float.round(safe_concept_charge(name), 6)
+           }}
+        end)
+        |> Map.new()
+      else
+        # Gel map is empty — rebuild from Concept GenServers
+        Wetware.Concept.list_all()
+        |> Enum.map(fn name ->
+          info = safe_concept_info(name)
+
+          {name,
+           %{
+             "center" => [info.cx, info.cy],
+             "r" => info.r,
+             "tags" => info.tags,
+             "parent" => info.parent,
+             "charge" => Float.round(safe_concept_charge(name), 6)
+           }}
+        end)
+        |> Enum.reject(fn {_name, info} -> info["center"] == [nil, nil] end)
+        |> Map.new()
+      end
 
     state = %{
       "version" => "elixir-v3-sparse",
@@ -109,7 +131,22 @@ defmodule Wetware.Persistence do
     concepts = parse_concepts(state["concepts"] || %{})
     Gel.reset_cells()
     Gel.set_step_count(step_count)
-    Gel.set_concepts(concepts)
+
+    # Merge saved concepts with already-registered concepts from boot.
+    # If the save file has position data, use it. If not, keep boot-time positions.
+    # This prevents data loss when concepts get lost from the save file.
+    existing_concepts = Gel.concepts()
+
+    merged_concepts =
+      if map_size(concepts) > 0 do
+        # Saved concepts exist — use them but fill in any missing from boot
+        Map.merge(existing_concepts, concepts)
+      else
+        # No saved concepts — keep what boot registered
+        existing_concepts
+      end
+
+    Gel.set_concepts(merged_concepts)
 
     cells = state["cells"] || %{}
 
@@ -209,6 +246,14 @@ defmodule Wetware.Persistence do
       Wetware.Concept.charge(name)
     catch
       :exit, _ -> 0.0
+    end
+  end
+
+  defp safe_concept_info(name) do
+    try do
+      Wetware.Concept.info(name)
+    catch
+      :exit, _ -> %{cx: nil, cy: nil, r: 3, tags: [], parent: nil}
     end
   end
 end
