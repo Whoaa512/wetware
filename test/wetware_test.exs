@@ -411,6 +411,26 @@ defmodule WetwareTest do
       assert after_clamped >= -1.0
     end
 
+    test "conflict context dampens assertive and amplifies care/listening" do
+      conflict = unique_name("conflict")
+      care = unique_name("care")
+      assertive = unique_name("assertive")
+
+      _ = register_temp_concept(conflict, 120, 120, 2, ["domain:emotional", "emotion:conflict"])
+      _ = register_temp_concept(care, 140, 120, 2, ["care", "listening"])
+      _ = register_temp_concept(assertive, 160, 120, 2, ["assertive"])
+
+      assert :ok = Resonance.imprint([conflict], steps: 2, strength: 0.9)
+      care_before = Concept.charge(care)
+      assertive_before = Concept.charge(assertive)
+
+      assert :ok = Resonance.imprint([care, assertive], steps: 1, strength: 0.6)
+      care_delta = Concept.charge(care) - care_before
+      assertive_delta = Concept.charge(assertive) - assertive_before
+
+      assert care_delta > assertive_delta
+    end
+
     test "imprint step briefing lifecycle" do
       concept_names = ["coding", "research"]
       before_step = Gel.step_count()
@@ -531,8 +551,8 @@ defmodule WetwareTest do
     :ok
   end
 
-  defp register_temp_concept(name, cx, cy, r) do
-    concept = %Concept{name: name, cx: cx, cy: cy, r: r, tags: ["test"]}
+  defp register_temp_concept(name, cx, cy, r, tags \\ ["test"]) do
+    concept = %Concept{name: name, cx: cx, cy: cy, r: r, tags: tags}
     assert :ok = Concept.register_all([concept])
 
     on_exit(fn ->

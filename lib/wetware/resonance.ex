@@ -1,7 +1,7 @@
 defmodule Wetware.Resonance do
   @moduledoc "Main API for imprinting, dreaming, briefing, and persistence."
 
-  alias Wetware.{Concept, DataPaths, Gel, Persistence}
+  alias Wetware.{Concept, DataPaths, EmotionalBias, Gel, Persistence}
 
   @dormancy_table :wetware_dormancy
 
@@ -77,7 +77,11 @@ defmodule Wetware.Resonance do
     strength = Keyword.get(opts, :strength, 1.0)
     valence = clamp(Keyword.get(opts, :valence, 0.0), -1.0, 1.0)
 
-    Enum.each(concept_names, fn name -> Concept.stimulate(name, strength, valence: valence) end)
+    Enum.each(concept_names, fn name ->
+      effective_strength = strength * EmotionalBias.strength_multiplier(name)
+      Concept.stimulate(name, effective_strength, valence: valence)
+    end)
+
     Enum.each(1..steps, fn _ -> Gel.step() end)
 
     :ok
