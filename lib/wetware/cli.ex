@@ -1,10 +1,12 @@
 defmodule Wetware.CLI do
   @moduledoc "CLI entrypoint for the wetware binary."
 
-  alias Wetware.{DataPaths, Discovery, Pruning, Resonance}
+  alias Wetware.{DataPaths, Discovery, Pruning, Resonance, Viz}
 
   # Embed default concepts at compile time so init works from the escript
-  @default_concepts File.read!(Path.expand("example/concepts.json", __DIR__ |> Path.join("../..")))
+  @default_concepts File.read!(
+                      Path.expand("example/concepts.json", __DIR__ |> Path.join("../.."))
+                    )
 
   def main(argv) do
     Application.ensure_all_started(:wetware)
@@ -41,6 +43,8 @@ defmodule Wetware.CLI do
       ["concepts" | _] -> cmd_concepts()
       ["discover" | rest] -> cmd_discover(rest)
       ["prune" | rest] -> cmd_prune(rest)
+      ["viz" | rest] -> cmd_viz(rest)
+      ["serve" | rest] -> cmd_viz(rest)
       ["help" | _] -> cmd_help()
       [] -> cmd_help()
       _ -> IO.puts("Unknown command. Run: wetware help")
@@ -65,7 +69,11 @@ defmodule Wetware.CLI do
         concept_count = count_concepts(concepts_path)
 
         IO.puts("")
-        IO.puts("#{IO.ANSI.green()}🧬 Wetware re-initialized with starter concepts#{IO.ANSI.reset()}")
+
+        IO.puts(
+          "#{IO.ANSI.green()}🧬 Wetware re-initialized with starter concepts#{IO.ANSI.reset()}"
+        )
+
         IO.puts("  Concepts: #{concept_count}")
         IO.puts("")
 
@@ -80,7 +88,9 @@ defmodule Wetware.CLI do
         if gel_exists do
           IO.puts("  Gel state: saved")
         else
-          IO.puts("  Gel state: not yet (run #{IO.ANSI.cyan()}wetware imprint#{IO.ANSI.reset()} to start)")
+          IO.puts(
+            "  Gel state: not yet (run #{IO.ANSI.cyan()}wetware imprint#{IO.ANSI.reset()} to start)"
+          )
         end
 
         IO.puts("")
@@ -90,7 +100,11 @@ defmodule Wetware.CLI do
       already_exists and gel_exists and not has_concepts?(concepts_path) ->
         # concepts.json exists but is empty, while gel state exists — something went wrong
         IO.puts("")
-        IO.puts("#{IO.ANSI.yellow()}⚠ Concepts file is empty but gel state exists#{IO.ANSI.reset()}")
+
+        IO.puts(
+          "#{IO.ANSI.yellow()}⚠ Concepts file is empty but gel state exists#{IO.ANSI.reset()}"
+        )
+
         IO.puts("  Data dir: #{data_dir}")
         IO.puts("")
         IO.puts("  This usually means concepts were cleared accidentally.")
@@ -121,12 +135,26 @@ defmodule Wetware.CLI do
         IO.puts("  #{IO.ANSI.bright()}What's here:#{IO.ANSI.reset()}")
         IO.puts("  #{data_dir}/concepts.json — your concept definitions")
         IO.puts("  Edit this file to add your own concepts, or use:")
-        IO.puts("    #{IO.ANSI.cyan()}wetware discover#{IO.ANSI.reset()} to auto-discover from text")
+
+        IO.puts(
+          "    #{IO.ANSI.cyan()}wetware discover#{IO.ANSI.reset()} to auto-discover from text"
+        )
+
         IO.puts("")
         IO.puts("  #{IO.ANSI.bright()}Next steps:#{IO.ANSI.reset()}")
-        IO.puts("    #{IO.ANSI.cyan()}wetware imprint \"coding, creativity\"#{IO.ANSI.reset()}  — stimulate concepts")
-        IO.puts("    #{IO.ANSI.cyan()}wetware dream --steps 20#{IO.ANSI.reset()}             — let the gel find connections")
-        IO.puts("    #{IO.ANSI.cyan()}wetware briefing#{IO.ANSI.reset()}                     — see what's resonating")
+
+        IO.puts(
+          "    #{IO.ANSI.cyan()}wetware imprint \"coding, creativity\"#{IO.ANSI.reset()}  — stimulate concepts"
+        )
+
+        IO.puts(
+          "    #{IO.ANSI.cyan()}wetware dream --steps 20#{IO.ANSI.reset()}             — let the gel find connections"
+        )
+
+        IO.puts(
+          "    #{IO.ANSI.cyan()}wetware briefing#{IO.ANSI.reset()}                     — see what's resonating"
+        )
+
         IO.puts("")
     end
   end
@@ -299,6 +327,16 @@ defmodule Wetware.CLI do
     Wetware.Replay.run(memory_dir, concepts_path, state_path)
   end
 
+  defp cmd_viz(rest) do
+    {opts, _argv, _invalid} = OptionParser.parse(rest, strict: [port: :integer])
+    port = Keyword.get(opts, :port, Viz.default_port())
+
+    case Viz.serve(port: port) do
+      :ok -> :ok
+      {:error, reason} -> IO.puts("viz failed: #{inspect(reason)}")
+    end
+  end
+
   defp cmd_help do
     IO.puts("""
 
@@ -320,6 +358,8 @@ defmodule Wetware.CLI do
       prune --dry-run                 Show prune candidates
       prune --confirm                 Prune dormant concepts
       replay <memory_dir>             Replay history through fresh gel
+      viz [--port N]                  Serve live browser visualization
+      serve [--port N]                Alias for viz
       status                          Show gel stats
       help                            This help message
 
