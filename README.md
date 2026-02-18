@@ -177,6 +177,15 @@ wetware priming --enable gentleness
 
 This keeps priming explicit to both agent and human operator.
 
+Example: gentleness priming when conflict and care are both active:
+
+```bash
+wetware imprint "conflict,care" --strength 0.8 --steps 2
+wetware priming --format json | jq '.disposition_hints'
+```
+
+You should see a `lean_gentle` hint unless `gentleness` is disabled via overrides.
+
 ### Example: Wrapping with a shell agent
 
 ```bash
