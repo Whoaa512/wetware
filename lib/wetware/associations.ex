@@ -12,16 +12,25 @@ defmodule Wetware.Associations do
   use GenServer
 
   # How fast co-activation strengthens associations
-  @learning_rate 0.05
+  @default_learning_rate 0.05
   # How fast associations weaken per step
-  @decay_rate 0.003
+  # Note: decay_step is called every gel step (each imprint runs ~5 steps,
+  # each dream ~20 steps). The rate must be low enough that associations
+  # survive multiple session cycles (imprint + dream ≈ 25 steps).
+  # At 0.0003/step, a single co-activation (0.05) survives ~167 steps (~6 sessions).
+  @default_decay_rate 0.0003
   @min_weight 0.0
   @max_weight 1.0
 
   # ── Client API ──────────────────────────────────────────────
 
-  def start_link(_opts) do
-    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  def start_link(opts \\ []) do
+    config = %{
+      learning_rate: Keyword.get(opts, :learning_rate, @default_learning_rate),
+      decay_rate: Keyword.get(opts, :decay_rate, @default_decay_rate)
+    }
+
+    GenServer.start_link(__MODULE__, config, name: __MODULE__)
   end
 
   @doc "Record co-activation of a set of concepts."
@@ -61,9 +70,28 @@ defmodule Wetware.Associations do
 
   # ── Server ──────────────────────────────────────────────────
 
+  @doc "Get the current learning and decay rates."
+  def rates do
+    GenServer.call(__MODULE__, :rates)
+  end
+
   @impl true
+  def init(config) when is_map(config) do
+    {:ok,
+     %{
+       weights: %{},
+       learning_rate: Map.get(config, :learning_rate, @default_learning_rate),
+       decay_rate: Map.get(config, :decay_rate, @default_decay_rate)
+     }}
+  end
+
   def init(_) do
-    {:ok, %{weights: %{}}}
+    {:ok,
+     %{
+       weights: %{},
+       learning_rate: @default_learning_rate,
+       decay_rate: @default_decay_rate
+     }}
   end
 
   @impl true
@@ -76,7 +104,7 @@ defmodule Wetware.Associations do
         key = pair_key(a, b)
         current = Map.get(acc, key, 0.0)
         # Hebbian: strengthen proportional to how far from max
-        delta = @learning_rate * (1.0 - current)
+        delta = state.learning_rate * (1.0 - current)
         Map.put(acc, key, min(current + delta, @max_weight))
       end)
 
@@ -88,13 +116,18 @@ defmodule Wetware.Associations do
     new_weights =
       state.weights
       |> Enum.map(fn {key, w} ->
-        new_w = w - @decay_rate
+        new_w = w - state.decay_rate
         {key, max(new_w, @min_weight)}
       end)
       |> Enum.reject(fn {_key, w} -> w <= @min_weight end)
       |> Map.new()
 
     {:noreply, %{state | weights: new_weights}}
+  end
+
+  @impl true
+  def handle_call(:rates, _from, state) do
+    {:reply, %{learning_rate: state.learning_rate, decay_rate: state.decay_rate}, state}
   end
 
   @impl true
@@ -135,7 +168,7 @@ defmodule Wetware.Associations do
   end
 
   @impl true
-  def handle_call({:import, data}, _from, _state) do
+  def handle_call({:import, data}, _from, state) do
     weights =
       data
       |> Enum.map(fn {key, w} ->
@@ -144,7 +177,7 @@ defmodule Wetware.Associations do
       end)
       |> Map.new()
 
-    {:reply, :ok, %{weights: weights}}
+    {:reply, :ok, %{state | weights: weights}}
   end
 
   # ── Helpers ─────────────────────────────────────────────────
