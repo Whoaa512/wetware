@@ -11,6 +11,7 @@ defmodule Wetware.DataPaths do
   def gel_state_path, do: Path.join(data_dir(), "gel_state.json")
   def pending_concepts_path, do: Path.join(data_dir(), "pending_concepts.json")
   def pruned_history_path, do: Path.join(data_dir(), "pruned_history.json")
+  def priming_overrides_path, do: Path.join(data_dir(), "priming_overrides.json")
 
   def ensure_data_dir! do
     File.mkdir_p!(data_dir())

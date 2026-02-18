@@ -1,7 +1,7 @@
 defmodule Wetware.Resonance do
   @moduledoc "Main API for imprinting, dreaming, briefing, and persistence."
 
-  alias Wetware.{Concept, DataPaths, EmotionalBias, Gel, Persistence, Priming}
+  alias Wetware.{Concept, DataPaths, EmotionalBias, Gel, Persistence, Priming, PrimingOverrides}
 
   @dormancy_table :wetware_dormancy
 
@@ -185,17 +185,29 @@ defmodule Wetware.Resonance do
 
   def priming_payload do
     briefing = briefing()
-    tokens = Priming.tokens_from_briefing(briefing)
-    prompt_block = Priming.prompt_block(briefing)
+    disabled_overrides = PrimingOverrides.disabled_keys()
+
+    effective_hints =
+      briefing.disposition_hints
+      |> Enum.reject(fn hint ->
+        key = Map.get(hint, :override_key) || Map.get(hint, "override_key")
+        key in disabled_overrides
+      end)
+
+    effective_briefing = %{briefing | disposition_hints: effective_hints}
+    tokens = Priming.tokens_from_briefing(effective_briefing)
+    prompt_block = Priming.prompt_block(effective_briefing)
 
     %{
       generated_at: DateTime.utc_now() |> DateTime.to_iso8601(),
       tokens: tokens,
-      disposition_hints: briefing.disposition_hints,
+      disposition_hints: effective_hints,
+      all_disposition_hints: briefing.disposition_hints,
+      disabled_overrides: disabled_overrides,
       prompt_block: prompt_block,
       transparent: true,
       override_keys:
-        briefing.disposition_hints
+        effective_hints
         |> Enum.map(fn hint -> Map.get(hint, :override_key) || Map.get(hint, "override_key") end)
         |> Enum.reject(&is_nil/1)
         |> Enum.uniq()

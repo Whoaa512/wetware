@@ -1,7 +1,7 @@
 defmodule Wetware.CLI do
   @moduledoc "CLI entrypoint for the wetware binary."
 
-  alias Wetware.{AutoImprint, DataPaths, Discovery, Pruning, Resonance, Viz}
+  alias Wetware.{AutoImprint, DataPaths, Discovery, PrimingOverrides, Pruning, Resonance, Viz}
 
   def main(argv) do
     Application.ensure_all_started(:wetware)
@@ -199,18 +199,38 @@ defmodule Wetware.CLI do
   end
 
   defp cmd_priming(rest) do
-    {opts, _, _} = OptionParser.parse(rest, strict: [format: :string])
-    format = Keyword.get(opts, :format, "text")
-    payload = Resonance.priming_payload()
+    {opts, _, _} =
+      OptionParser.parse(rest,
+        strict: [format: :string, enable: :string, disable: :string, show_overrides: :boolean]
+      )
 
-    case format do
-      "json" ->
-        IO.puts(Jason.encode!(payload, pretty: true))
+    cond do
+      opts[:enable] ->
+        :ok = PrimingOverrides.set_enabled(opts[:enable], true)
+        IO.puts("enabled priming override key: #{opts[:enable]}")
 
-      _ ->
-        IO.puts(payload.prompt_block)
-        IO.puts("")
-        IO.puts("Override keys: #{Enum.join(payload.override_keys, ", ")}")
+      opts[:disable] ->
+        :ok = PrimingOverrides.set_enabled(opts[:disable], false)
+        IO.puts("disabled priming override key: #{opts[:disable]}")
+
+      opts[:show_overrides] ->
+        disabled = PrimingOverrides.disabled_keys()
+        IO.puts("disabled override keys: #{Enum.join(disabled, ", ")}")
+
+      true ->
+        format = Keyword.get(opts, :format, "text")
+        payload = Resonance.priming_payload()
+
+        case format do
+          "json" ->
+            IO.puts(Jason.encode!(payload, pretty: true))
+
+          _ ->
+            IO.puts(payload.prompt_block)
+            IO.puts("")
+            IO.puts("Override keys: #{Enum.join(payload.override_keys, ", ")}")
+            IO.puts("Disabled overrides: #{Enum.join(payload.disabled_overrides, ", ")}")
+        end
     end
   end
 
@@ -372,6 +392,9 @@ defmodule Wetware.CLI do
       briefing                        Show resonance briefing
       concepts                        List concepts and charge levels
       priming [--format json]         Generate transparent priming tokens
+      priming --disable <key>         Disable a priming orientation
+      priming --enable <key>          Re-enable a priming orientation
+      priming --show-overrides        Show disabled override keys
       imprint \"concept1, concept2\"    Stimulate concepts (--steps/--strength/--valence)
       dream [--steps N]               Run dream mode
       discover <text_or_file>         Scan for pending concepts

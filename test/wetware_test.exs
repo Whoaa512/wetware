@@ -1,7 +1,16 @@
 defmodule WetwareTest do
   use ExUnit.Case, async: false
 
-  alias Wetware.{Associations, Cell, Concept, Gel, Params, Persistence, Resonance}
+  alias Wetware.{
+    Associations,
+    Cell,
+    Concept,
+    Gel,
+    Params,
+    Persistence,
+    PrimingOverrides,
+    Resonance
+  }
 
   @example_concepts_path Path.expand("example/concepts.json", File.cwd!())
 
@@ -396,6 +405,41 @@ defmodule WetwareTest do
       assert payload.transparent == true
       assert is_list(payload.override_keys)
       assert String.contains?(payload.prompt_block, "[WETWARE_PRIMING_BEGIN]")
+    end
+
+    test "gentleness priming appears when care and conflict are warm" do
+      conflict = unique_name("conflict")
+      care = unique_name("care")
+
+      _ = register_temp_concept(conflict, 310, 310, 2, ["emotion:conflict"])
+      _ = register_temp_concept(care, 330, 310, 2, ["care", "gentleness"])
+
+      assert :ok = Resonance.imprint([conflict, care], steps: 2, strength: 0.8)
+      payload = Resonance.priming_payload()
+
+      assert Enum.any?(payload.disposition_hints, fn hint ->
+               (hint[:id] || hint["id"]) == "lean_gentle"
+             end)
+    end
+
+    test "disabled priming override removes hint from effective payload" do
+      conflict = unique_name("conflict")
+      care = unique_name("care")
+
+      _ = register_temp_concept(conflict, 350, 350, 2, ["emotion:conflict"])
+      _ = register_temp_concept(care, 370, 350, 2, ["care", "gentleness"])
+
+      assert :ok = Resonance.imprint([conflict, care], steps: 2, strength: 0.8)
+      :ok = PrimingOverrides.set_enabled("gentleness", false)
+
+      on_exit(fn -> :ok = PrimingOverrides.set_enabled("gentleness", true) end)
+
+      payload = Resonance.priming_payload()
+      assert "gentleness" in payload.disabled_overrides
+
+      refute Enum.any?(payload.disposition_hints, fn hint ->
+               (hint[:override_key] || hint["override_key"]) == "gentleness"
+             end)
     end
 
     test "dream mode advances steps and returns echoes" do

@@ -158,6 +158,25 @@ Or use the helper script with a transcript file:
 
 `depth` is 1-10. Longer/deeper sessions imprint more strongly than short status exchanges.
 
+### Transparent priming + human override
+
+Generate priming output for system prompt injection:
+
+```bash
+wetware priming
+wetware priming --format json
+```
+
+Show or override orientations:
+
+```bash
+wetware priming --show-overrides
+wetware priming --disable gentleness
+wetware priming --enable gentleness
+```
+
+This keeps priming explicit to both agent and human operator.
+
 ### Example: Wrapping with a shell agent
 
 ```bash
