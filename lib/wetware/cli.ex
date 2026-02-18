@@ -1,7 +1,7 @@
 defmodule Wetware.CLI do
   @moduledoc "CLI entrypoint for the wetware binary."
 
-  alias Wetware.{DataPaths, Discovery, Pruning, Resonance, Viz}
+  alias Wetware.{AutoImprint, DataPaths, Discovery, Pruning, Resonance, Viz}
 
   def main(argv) do
     Application.ensure_all_started(:wetware)
@@ -38,6 +38,7 @@ defmodule Wetware.CLI do
       ["concepts" | _] -> cmd_concepts()
       ["discover" | rest] -> cmd_discover(rest)
       ["prune" | rest] -> cmd_prune(rest)
+      ["auto-imprint", input | rest] -> cmd_auto_imprint(input, rest, gel_state_path)
       ["viz" | rest] -> cmd_viz(rest)
       ["serve" | rest] -> cmd_viz(rest)
       ["help" | _] -> cmd_help()
@@ -282,6 +283,55 @@ defmodule Wetware.CLI do
     Wetware.Replay.run(memory_dir, concepts_path, state_path)
   end
 
+  defp cmd_auto_imprint(input, rest, state_path) do
+    {opts, _, _} =
+      OptionParser.parse(rest,
+        strict: [duration_minutes: :integer, depth: :integer, steps: :integer]
+      )
+
+    text =
+      if File.exists?(input) and File.regular?(input) do
+        File.read!(input)
+      else
+        input
+      end
+
+    auto_opts =
+      []
+      |> then(fn o ->
+        if opts[:duration_minutes],
+          do: Keyword.put(o, :duration_minutes, opts[:duration_minutes]),
+          else: o
+      end)
+      |> then(fn o -> if opts[:depth], do: Keyword.put(o, :depth, opts[:depth]), else: o end)
+      |> then(fn o -> if opts[:steps], do: Keyword.put(o, :steps, opts[:steps]), else: o end)
+
+    case AutoImprint.run(text, auto_opts) do
+      {:ok, result} ->
+        Resonance.save(state_path)
+
+        IO.puts("auto-imprint complete")
+        IO.puts("  matched: #{length(result.matched_concepts)} concepts")
+        IO.puts("  valence: #{result.valence}")
+        IO.puts("  weight:  #{result.weight}")
+        IO.puts("  steps:   #{result.steps}")
+
+        if result.matched_concepts != [] do
+          line =
+            result.matched_concepts
+            |> Enum.map(fn {name, count, strength} ->
+              "#{name}(hits=#{count}, strength=#{strength})"
+            end)
+            |> Enum.join(", ")
+
+          IO.puts("  concepts: #{line}")
+        end
+
+      {:error, :no_concepts_matched} ->
+        IO.puts("auto-imprint skipped: no known concepts matched the provided text")
+    end
+  end
+
   defp cmd_viz(rest) do
     {opts, _argv, _invalid} = OptionParser.parse(rest, strict: [port: :integer])
     port = Keyword.get(opts, :port, Viz.default_port())
@@ -310,6 +360,7 @@ defmodule Wetware.CLI do
       discover --pending              Show pending terms
       discover --graduate             Graduate all eligible terms
       discover --graduate <term>      Graduate one term
+      auto-imprint <text_or_file>     Auto-extract concepts + valence and imprint
       prune --dry-run                 Show prune candidates
       prune --confirm                 Prune dormant concepts
       replay <memory_dir>             Replay history through fresh gel
