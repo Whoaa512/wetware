@@ -99,6 +99,29 @@ defmodule WetwareTest do
 
       assert {:ok, _pid} = Wetware.Gel.Index.cell_pid(target)
     end
+
+    test "self-reshaping topology creates non-grid links for co-active cells" do
+      a = {600, 600}
+      b = {603, 600}
+
+      {:ok, _} = Gel.ensure_cell(a, :test, kind: :concept)
+      {:ok, _} = Gel.ensure_cell(b, :test, kind: :concept)
+
+      Cell.restore(a, 0.9, %{}, kind: :concept)
+      Cell.restore(b, 0.9, %{}, kind: :concept)
+
+      refute Map.has_key?(Cell.get_state(a).neighbors, {3, 0})
+      refute Map.has_key?(Cell.get_state(b).neighbors, {-3, 0})
+
+      Enum.each(1..8, fn _ ->
+        Cell.stimulate(a, 1.0)
+        Cell.stimulate(b, 1.0)
+        assert {:ok, _} = Gel.step()
+      end)
+
+      assert Map.has_key?(Cell.get_state(a).neighbors, {3, 0})
+      assert Map.has_key?(Cell.get_state(b).neighbors, {-3, 0})
+    end
   end
 
   describe "Application wiring" do

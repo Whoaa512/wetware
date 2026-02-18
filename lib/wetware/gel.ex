@@ -6,6 +6,8 @@ defmodule Wetware.Gel do
   use GenServer
 
   alias Wetware.{Cell, Params, Resonance}
+  @reshape_interval 4
+  @reshape_max_offset 4
 
   defstruct params: %Params{}, step_count: 0, started: false, concepts: %{}
 
@@ -171,30 +173,40 @@ defmodule Wetware.Gel do
     do: {:reply, {:error, :not_booted}, state}
 
   def handle_call(:step, _from, state) do
-    offsets = Params.neighbor_offsets()
+    base_offsets = Params.neighbor_offsets()
     cells = Wetware.Gel.Index.list_cells()
 
-    signal_map =
+    {signal_map, cell_state_map} =
       cells
       |> Enum.map(fn {coord, pid} ->
-        state = Cell.get_state(pid)
-        {coord, %{charge: Map.get(state, :charge, 0.0), valence: Map.get(state, :valence, 0.0)}}
+        cell_state = Cell.get_state(pid)
+
+        {coord,
+         {%{
+            charge: Map.get(cell_state, :charge, 0.0),
+            valence: Map.get(cell_state, :valence, 0.0)
+          }, cell_state}}
       end)
-      |> Map.new()
+      |> Enum.reduce({%{}, %{}}, fn {coord, {signal, cell_state}}, {signals, states} ->
+        {Map.put(signals, coord, signal), Map.put(states, coord, cell_state)}
+      end)
 
     new_count = state.step_count + 1
 
     tasks =
       Enum.map(cells, fn {{x, y} = coord, pid} ->
+        source_state = Map.get(cell_state_map, coord, %{neighbors: %{}})
+        offsets = source_state.neighbors |> Map.keys()
+
         neighbor_charges =
-          for {dy, dx} <- offsets,
+          for {dx, dy} <- offsets,
               into: %{} do
             ncoord = {x + dx, y + dy}
             {{dx, dy}, get_in(signal_map, [ncoord, :charge]) || 0.0}
           end
 
         neighbor_valences =
-          for {dy, dx} <- offsets,
+          for {dx, dy} <- offsets,
               into: %{} do
             ncoord = {x + dx, y + dy}
             {{dx, dy}, get_in(signal_map, [ncoord, :valence]) || 0.0}
@@ -204,7 +216,7 @@ defmodule Wetware.Gel do
         coord_charge = get_in(signal_map, [coord, :charge]) || 0.0
 
         if coord_charge > state.params.activation_threshold do
-          Enum.each(offsets, fn {dy, dx} ->
+          Enum.each(base_offsets, fn {dy, dx} ->
             target = {x + dx, y + dy}
 
             if not Map.has_key?(signal_map, target) do
@@ -219,6 +231,7 @@ defmodule Wetware.Gel do
       end)
 
     Task.await_many(tasks, 30_000)
+    maybe_reshape_topology(cells, cell_state_map, new_count, state.params)
 
     {_, post_spawn_state} =
       Wetware.Gel.Index.take_pending_above(state.params.spawn_threshold)
@@ -444,6 +457,55 @@ defmodule Wetware.Gel do
 
         :error ->
           :ok
+      end
+    end)
+  end
+
+  defp maybe_reshape_topology(_cells, _cell_state_map, step_count, _params)
+       when rem(step_count, @reshape_interval) != 0,
+       do: :ok
+
+  defp maybe_reshape_topology(cells, cell_state_map, _step_count, params) do
+    pid_map = Map.new(cells)
+
+    active =
+      cell_state_map
+      |> Enum.filter(fn {_coord, cell_state} ->
+        Map.get(cell_state, :charge, 0.0) > params.activation_threshold
+      end)
+
+    Enum.each(active, fn {{x, y} = source_coord, source_state} ->
+      source_neighbors = source_state |> Map.get(:neighbors, %{}) |> Map.keys() |> MapSet.new()
+
+      target =
+        active
+        |> Enum.reject(fn {coord, _} -> coord == source_coord end)
+        |> Enum.reject(fn {{tx, ty}, _} ->
+          dx = tx - x
+          dy = ty - y
+
+          MapSet.member?(source_neighbors, {dx, dy}) or
+            max(abs(dx), abs(dy)) <= 1 or
+            max(abs(dx), abs(dy)) > @reshape_max_offset
+        end)
+        |> Enum.max_by(
+          fn {{tx, ty}, tstate} ->
+            distance = max(abs(tx - x), abs(ty - y))
+            charge = Map.get(tstate, :charge, 0.0)
+            charge - distance * 0.05
+          end,
+          fn -> nil end
+        )
+
+      if target do
+        {{tx, ty}, _target_state} = target
+        offset = {tx - x, ty - y}
+
+        with {:ok, source_pid} <- Map.fetch(pid_map, source_coord),
+             {:ok, target_pid} <- Map.fetch(pid_map, {tx, ty}) do
+          _ = Cell.connect_neighbor(source_pid, offset)
+          _ = Cell.connect_neighbor(target_pid, {-elem(offset, 0), -elem(offset, 1)})
+        end
       end
     end)
   end
