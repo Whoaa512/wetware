@@ -41,6 +41,15 @@ defmodule Wetware.AutoImprintTest do
              AutoImprint.run("xqv zzt lmnqv unslotted phrasing", depth: 3, duration_minutes: 10)
   end
 
+  test "depth/duration weighting scales stronger for deeper longer sessions" do
+    shallow = AutoImprint.depth_duration_weight(1, 5)
+    medium = AutoImprint.depth_duration_weight(5, 30)
+    deep = AutoImprint.depth_duration_weight(9, 120)
+
+    assert shallow < medium
+    assert medium < deep
+  end
+
   defp tmp_path(label) do
     Path.join(
       System.tmp_dir!(),

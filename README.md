@@ -142,6 +142,22 @@ Wetware is designed to plug into **any agent framework** via its CLI. Your agent
 2. **After a task**: Run `wetware imprint "concepts,from,the,task"` to strengthen relevant pathways.
 3. **During idle time**: Run `wetware dream` to let the substrate find unexpected connections.
 
+### Post-session auto-imprint hook
+
+For framework-agnostic session lifecycle integration, call `wetware auto-imprint` at the end of each conversation:
+
+```bash
+wetware auto-imprint "<summary_or_transcript_text>" --duration_minutes 45 --depth 6
+```
+
+Or use the helper script with a transcript file:
+
+```bash
+./scripts/wetware_post_session_hook.sh /path/to/session.txt 45 6
+```
+
+`depth` is 1-10. Longer/deeper sessions imprint more strongly than short status exchanges.
+
 ### Example: Wrapping with a shell agent
 
 ```bash
