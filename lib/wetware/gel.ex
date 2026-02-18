@@ -174,9 +174,12 @@ defmodule Wetware.Gel do
     offsets = Params.neighbor_offsets()
     cells = Wetware.Gel.Index.list_cells()
 
-    charge_map =
+    signal_map =
       cells
-      |> Enum.map(fn {coord, pid} -> {coord, Cell.get_charge(pid)} end)
+      |> Enum.map(fn {coord, pid} ->
+        state = Cell.get_state(pid)
+        {coord, %{charge: Map.get(state, :charge, 0.0), valence: Map.get(state, :valence, 0.0)}}
+      end)
       |> Map.new()
 
     new_count = state.step_count + 1
@@ -187,21 +190,32 @@ defmodule Wetware.Gel do
           for {dy, dx} <- offsets,
               into: %{} do
             ncoord = {x + dx, y + dy}
-            {{dx, dy}, Map.get(charge_map, ncoord, 0.0)}
+            {{dx, dy}, get_in(signal_map, [ncoord, :charge]) || 0.0}
+          end
+
+        neighbor_valences =
+          for {dy, dx} <- offsets,
+              into: %{} do
+            ncoord = {x + dx, y + dy}
+            {{dx, dy}, get_in(signal_map, [ncoord, :valence]) || 0.0}
           end
 
         # Deposit pending input into empty neighbors for on-demand spawning.
-        if charge_map[coord] > state.params.activation_threshold do
+        coord_charge = get_in(signal_map, [coord, :charge]) || 0.0
+
+        if coord_charge > state.params.activation_threshold do
           Enum.each(offsets, fn {dy, dx} ->
             target = {x + dx, y + dy}
 
-            if not Map.has_key?(charge_map, target) do
-              Wetware.Gel.Index.add_pending(target, charge_map[coord] * 0.03)
+            if not Map.has_key?(signal_map, target) do
+              Wetware.Gel.Index.add_pending(target, coord_charge * 0.03)
             end
           end)
         end
 
-        Task.async(fn -> Cell.step_with_charges(pid, neighbor_charges, new_count) end)
+        Task.async(fn ->
+          Cell.step_with_charges(pid, neighbor_charges, neighbor_valences, new_count)
+        end)
       end)
 
     Task.await_many(tasks, 30_000)

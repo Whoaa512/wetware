@@ -31,7 +31,7 @@ defmodule Wetware.CLI do
 
     case argv do
       ["briefing" | _] -> cmd_briefing()
-      ["imprint", concepts_str | _] -> cmd_imprint(concepts_str, gel_state_path)
+      ["imprint", concepts_str | rest] -> cmd_imprint(concepts_str, rest, gel_state_path)
       ["dream" | rest] -> cmd_dream(rest, gel_state_path)
       ["replay", memory_dir | _] -> cmd_replay(memory_dir, concepts_path, gel_state_path)
       ["status" | _] -> cmd_status()
@@ -129,14 +129,27 @@ defmodule Wetware.CLI do
 
   defp cmd_briefing, do: Resonance.print_briefing()
 
-  defp cmd_imprint(concepts_str, state_path) do
+  defp cmd_imprint(concepts_str, rest, state_path) do
+    {opts, _, _} =
+      OptionParser.parse(rest, strict: [steps: :integer, strength: :float, valence: :float])
+
     concepts =
       concepts_str
       |> String.split(",")
       |> Enum.map(&String.trim/1)
       |> Enum.reject(&(&1 == ""))
 
-    Resonance.imprint(concepts)
+    imprint_opts =
+      []
+      |> then(fn o -> if opts[:steps], do: Keyword.put(o, :steps, opts[:steps]), else: o end)
+      |> then(fn o ->
+        if opts[:strength], do: Keyword.put(o, :strength, opts[:strength]), else: o
+      end)
+      |> then(fn o ->
+        if opts[:valence], do: Keyword.put(o, :valence, opts[:valence]), else: o
+      end)
+
+    Resonance.imprint(concepts, imprint_opts)
     Resonance.save(state_path)
     IO.puts("State saved")
   end
@@ -291,7 +304,7 @@ defmodule Wetware.CLI do
       init                            Set up data dir with empty concepts.json
       briefing                        Show resonance briefing
       concepts                        List concepts and charge levels
-      imprint \"concept1, concept2\"    Stimulate concepts
+      imprint \"concept1, concept2\"    Stimulate concepts (--steps/--strength/--valence)
       dream [--steps N]               Run dream mode
       discover <text_or_file>         Scan for pending concepts
       discover --pending              Show pending terms

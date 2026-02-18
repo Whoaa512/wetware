@@ -5,6 +5,8 @@ defmodule Wetware.Params do
 
   defstruct propagation_rate: 0.12,
             charge_decay: 0.06,
+            valence_propagation_rate: 0.08,
+            valence_decay: 0.04,
             activation_threshold: 0.1,
             learning_rate: 0.015,
             decay_rate: 0.007,
@@ -19,6 +21,8 @@ defmodule Wetware.Params do
   @type t :: %__MODULE__{
           propagation_rate: float(),
           charge_decay: float(),
+          valence_propagation_rate: float(),
+          valence_decay: float(),
           activation_threshold: float(),
           learning_rate: float(),
           decay_rate: float(),

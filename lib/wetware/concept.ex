@@ -18,8 +18,13 @@ defmodule Wetware.Concept do
 
   def via(name), do: {:via, Registry, {Wetware.ConceptRegistry, name}}
 
-  def stimulate(name, strength \\ 1.0), do: GenServer.cast(via(name), {:stimulate, strength})
+  def stimulate(name, strength \\ 1.0, opts \\ []) do
+    valence = Keyword.get(opts, :valence, 0.0)
+    GenServer.cast(via(name), {:stimulate, strength, valence})
+  end
+
   def charge(name), do: GenServer.call(via(name), :charge, 15_000)
+  def valence(name), do: GenServer.call(via(name), :valence, 15_000)
   def associations(name), do: GenServer.call(via(name), :associations, 30_000)
   def info(name), do: GenServer.call(via(name), :info)
 
@@ -64,11 +69,11 @@ defmodule Wetware.Concept do
   end
 
   @impl true
-  def handle_cast({:stimulate, strength}, concept) do
+  def handle_cast({:stimulate, strength, valence}, concept) do
     cells_in_region(concept)
     |> Enum.each(fn {x, y} ->
       if match?([_ | _], Registry.lookup(Wetware.CellRegistry, {x, y})),
-        do: Cell.stimulate({x, y}, strength)
+        do: Cell.stimulate_emotional({x, y}, strength, valence)
     end)
 
     {:noreply, concept}
@@ -84,6 +89,26 @@ defmodule Wetware.Concept do
       total =
         cells
         |> Enum.map(&cell_charge/1)
+        |> Enum.sum()
+
+      {:reply, total / length(cells), concept}
+    end
+  end
+
+  def handle_call(:valence, _from, concept) do
+    cells = cells_in_region(concept)
+
+    if cells == [] do
+      {:reply, 0.0, concept}
+    else
+      total =
+        cells
+        |> Enum.map(fn {x, y} ->
+          case safe_cell_state({x, y}) do
+            %{valence: v} -> v
+            _ -> 0.0
+          end
+        end)
         |> Enum.sum()
 
       {:reply, total / length(cells), concept}

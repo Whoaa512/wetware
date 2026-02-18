@@ -13,7 +13,9 @@ defmodule Wetware.Persistence do
 
     live_map =
       live_cells
-      |> Enum.map(fn {{x, y}, pid} -> {"#{x}:#{y}", serialize_cell_state(Cell.get_state(pid))} end)
+      |> Enum.map(fn {{x, y}, pid} ->
+        {"#{x}:#{y}", serialize_cell_state(Cell.get_state(pid))}
+      end)
       |> Map.new()
 
     snapshot_map =
@@ -44,6 +46,8 @@ defmodule Wetware.Persistence do
       "params" => %{
         "propagation_rate" => p.propagation_rate,
         "charge_decay" => p.charge_decay,
+        "valence_propagation_rate" => p.valence_propagation_rate,
+        "valence_decay" => p.valence_decay,
         "activation_threshold" => p.activation_threshold,
         "learning_rate" => p.learning_rate,
         "decay_rate" => p.decay_rate,
@@ -120,13 +124,15 @@ defmodule Wetware.Persistence do
       weights_map =
         (data["neighbors"] || %{})
         |> Enum.map(fn {offset_key, info} ->
-          {parse_offset_key(offset_key), %{weight: info["weight"] || p.w_init, crystallized: info["crystallized"] || false}}
+          {parse_offset_key(offset_key),
+           %{weight: info["weight"] || p.w_init, crystallized: info["crystallized"] || false}}
         end)
         |> Map.new()
 
       Cell.restore({x, y}, data["charge"] || 0.0, weights_map,
         kind: parse_kind(data["kind"]),
         owners: data["owners"] || [],
+        valence: data["valence"] || 0.0,
         last_step: data["last_step"] || step_count,
         last_active_step: data["last_active_step"] || step_count
       )
@@ -154,6 +160,7 @@ defmodule Wetware.Persistence do
 
     %{
       "charge" => Float.round(Map.get(state, :charge, 0.0), 6),
+      "valence" => Float.round(Map.get(state, :valence, 0.0), 6),
       "kind" => Atom.to_string(Map.get(state, :kind, :interstitial)),
       "owners" => Map.get(state, :owners, []),
       "last_step" => Map.get(state, :last_step, 0),

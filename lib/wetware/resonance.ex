@@ -1,5 +1,5 @@
 defmodule Wetware.Resonance do
-  @moduledoc "Main API for imprinting, dreaming, briefing, and persistence." 
+  @moduledoc "Main API for imprinting, dreaming, briefing, and persistence."
 
   alias Wetware.{Concept, DataPaths, Gel, Persistence}
 
@@ -75,8 +75,9 @@ defmodule Wetware.Resonance do
   def imprint(concept_names, opts \\ []) do
     steps = Keyword.get(opts, :steps, 5)
     strength = Keyword.get(opts, :strength, 1.0)
+    valence = clamp(Keyword.get(opts, :valence, 0.0), -1.0, 1.0)
 
-    Enum.each(concept_names, fn name -> Concept.stimulate(name, strength) end)
+    Enum.each(concept_names, fn name -> Concept.stimulate(name, strength, valence: valence) end)
     Enum.each(1..steps, fn _ -> Gel.step() end)
 
     :ok
@@ -108,7 +109,13 @@ defmodule Wetware.Resonance do
       |> Enum.filter(fn {_name, %{charge: c}} -> c <= 0.01 end)
       |> Enum.map(fn {name, _} -> name end)
 
-    %{step_count: Gel.step_count(), total_concepts: length(concepts), active: active, warm: warm, dormant: dormant}
+    %{
+      step_count: Gel.step_count(),
+      total_concepts: length(concepts),
+      active: active,
+      warm: warm,
+      dormant: dormant
+    }
   end
 
   def dream(opts \\ []) do
@@ -157,7 +164,14 @@ defmodule Wetware.Resonance do
     |> Enum.map(fn name ->
       info = Concept.info(name)
 
-      %{name: name, charge: Concept.charge(name), cx: info.cx, cy: info.cy, r: info.r, tags: info.tags}
+      %{
+        name: name,
+        charge: Concept.charge(name),
+        cx: info.cx,
+        cy: info.cy,
+        r: info.r,
+        tags: info.tags
+      }
     end)
     |> Enum.sort_by(&(-&1.charge))
   end
@@ -177,7 +191,14 @@ defmodule Wetware.Resonance do
         [] -> 0
       end
 
-    %{concept: name, current_step: current_step, threshold: threshold, last_active_step: last_active_step, dormant_steps: max(current_step - last_active_step, 0), charge: Float.round(charge, 6)}
+    %{
+      concept: name,
+      current_step: current_step,
+      threshold: threshold,
+      last_active_step: last_active_step,
+      dormant_steps: max(current_step - last_active_step, 0),
+      charge: Float.round(charge, 6)
+    }
   end
 
   def observe_step(step_count, threshold \\ 0.05) do
@@ -192,7 +213,9 @@ defmodule Wetware.Resonance do
           :exit, _ -> 0.0
         end
 
-      if charge > threshold, do: :ets.insert(@dormancy_table, {name, step_count}), else: maybe_seed_dormancy(name, step_count)
+      if charge > threshold,
+        do: :ets.insert(@dormancy_table, {name, step_count}),
+        else: maybe_seed_dormancy(name, step_count)
     end)
 
     :ok
@@ -241,8 +264,11 @@ defmodule Wetware.Resonance do
 
   defp ensure_dormancy_table! do
     case :ets.whereis(@dormancy_table) do
-      :undefined -> :ets.new(@dormancy_table, [:set, :named_table, :public, read_concurrency: true])
-      _ -> :ok
+      :undefined ->
+        :ets.new(@dormancy_table, [:set, :named_table, :public, read_concurrency: true])
+
+      _ ->
+        :ok
     end
 
     :ok
@@ -259,6 +285,8 @@ defmodule Wetware.Resonance do
       _ -> :ok
     end
   end
+
+  defp clamp(v, lo, hi), do: max(lo, min(hi, v))
 
   defp ensure_name_available(name) do
     if name in Concept.list_all(), do: {:error, :already_exists}, else: :ok
@@ -291,7 +319,11 @@ defmodule Wetware.Resonance do
           "tags" => concept.tags
         })
 
-      File.write!(concepts_path, Jason.encode!(Map.put(decoded, "concepts", updated), pretty: true))
+      File.write!(
+        concepts_path,
+        Jason.encode!(Map.put(decoded, "concepts", updated), pretty: true)
+      )
+
       :ok
     else
       {:error, reason} -> {:error, reason}
@@ -304,7 +336,11 @@ defmodule Wetware.Resonance do
       concepts = Map.get(decoded, "concepts", %{})
       updated = Map.delete(concepts, name)
 
-      File.write!(concepts_path, Jason.encode!(Map.put(decoded, "concepts", updated), pretty: true))
+      File.write!(
+        concepts_path,
+        Jason.encode!(Map.put(decoded, "concepts", updated), pretty: true)
+      )
+
       :ok
     else
       {:error, reason} -> {:error, reason}

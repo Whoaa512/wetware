@@ -13,6 +13,7 @@ defmodule Wetware.Cell do
     kind: :interstitial,
     owners: [],
     charge: 0.0,
+    valence: 0.0,
     neighbors: %{},
     params: %Params{},
     step_epoch: 0,
@@ -47,12 +48,36 @@ defmodule Wetware.Cell do
   def stimulate(pid, amount) when is_pid(pid), do: GenServer.cast(pid, {:stimulate, amount})
   def stimulate({x, y}, amount), do: GenServer.cast(via(x, y), {:stimulate, amount})
 
+  def stimulate_emotional(pid, amount, valence) when is_pid(pid) do
+    GenServer.cast(pid, {:stimulate, amount, valence})
+  end
+
+  def stimulate_emotional({x, y}, amount, valence) do
+    GenServer.cast(via(x, y), {:stimulate, amount, valence})
+  end
+
   def step_with_charges(pid, neighbor_charges, step_count) when is_pid(pid) do
-    GenServer.call(pid, {:step_with_charges, neighbor_charges, step_count}, 15_000)
+    step_with_charges(pid, neighbor_charges, %{}, step_count)
   end
 
   def step_with_charges({x, y}, neighbor_charges, step_count) do
-    GenServer.call(via(x, y), {:step_with_charges, neighbor_charges, step_count}, 15_000)
+    step_with_charges({x, y}, neighbor_charges, %{}, step_count)
+  end
+
+  def step_with_charges(pid, neighbor_charges, neighbor_valences, step_count) when is_pid(pid) do
+    GenServer.call(
+      pid,
+      {:step_with_charges, neighbor_charges, neighbor_valences, step_count},
+      15_000
+    )
+  end
+
+  def step_with_charges({x, y}, neighbor_charges, neighbor_valences, step_count) do
+    GenServer.call(
+      via(x, y),
+      {:step_with_charges, neighbor_charges, neighbor_valences, step_count},
+      15_000
+    )
   end
 
   def get_charge(pid) when is_pid(pid), do: GenServer.call(pid, :get_charge, 5_000)
@@ -71,7 +96,9 @@ defmodule Wetware.Cell do
     GenServer.call(via(x, y), {:restore, charge, weights_map, attrs})
   end
 
-  def connect_neighbor(pid, {dx, dy}) when is_pid(pid), do: GenServer.call(pid, {:connect_neighbor, {dx, dy}})
+  def connect_neighbor(pid, {dx, dy}) when is_pid(pid),
+    do: GenServer.call(pid, {:connect_neighbor, {dx, dy}})
+
   def add_owner(pid, owner) when is_pid(pid), do: GenServer.call(pid, {:add_owner, owner})
 
   @impl true
@@ -90,21 +117,18 @@ defmodule Wetware.Cell do
 
   @impl true
   def handle_cast({:stimulate, amount}, state) do
-    new_charge = clamp(state.charge + amount, 0.0, 1.0)
+    {:noreply, stimulate_state(state, amount, 0.0)}
+  end
 
-    new_state =
-      if new_charge > state.params.activation_threshold do
-        %{state | charge: new_charge, last_active_step: max(state.last_active_step, state.last_step)}
-      else
-        %{state | charge: new_charge}
-      end
-
-    {:noreply, new_state}
+  def handle_cast({:stimulate, amount, valence}, state) do
+    {:noreply, stimulate_state(state, amount, valence)}
   end
 
   @impl true
   def handle_call({:connect_neighbor, offset}, _from, state) do
-    neighbors = Map.put_new(state.neighbors, offset, %{weight: state.params.w_init, crystallized: false})
+    neighbors =
+      Map.put_new(state.neighbors, offset, %{weight: state.params.w_init, crystallized: false})
+
     {:reply, :ok, %{state | neighbors: neighbors}}
   end
 
@@ -114,8 +138,17 @@ defmodule Wetware.Cell do
     {:reply, :ok, %{state | owners: owners, kind: kind}}
   end
 
+  def handle_call(
+        {:step_with_charges, neighbor_charges, neighbor_valences, step_count},
+        _from,
+        state
+      ) do
+    new_state = do_step(state, neighbor_charges, neighbor_valences, step_count)
+    {:reply, :ok, new_state}
+  end
+
   def handle_call({:step_with_charges, neighbor_charges, step_count}, _from, state) do
-    new_state = do_step(state, neighbor_charges, step_count)
+    new_state = do_step(state, neighbor_charges, %{}, step_count)
     {:reply, :ok, new_state}
   end
 
@@ -126,6 +159,7 @@ defmodule Wetware.Cell do
       x: state.x,
       y: state.y,
       charge: state.charge,
+      valence: state.valence,
       kind: state.kind,
       owners: state.owners,
       neighbors: state.neighbors,
@@ -147,8 +181,7 @@ defmodule Wetware.Cell do
           {offset,
            %{
              weight: Map.get(entry, :weight, Map.get(entry, "weight", state.params.w_init)),
-             crystallized:
-               Map.get(entry, :crystallized, Map.get(entry, "crystallized", false))
+             crystallized: Map.get(entry, :crystallized, Map.get(entry, "crystallized", false))
            }}
         end)
         |> Map.new()
@@ -156,25 +189,47 @@ defmodule Wetware.Cell do
 
     kind = Keyword.get(attrs, :kind, state.kind)
     owners = Keyword.get(attrs, :owners, state.owners)
+    valence = clamp(Keyword.get(attrs, :valence, state.valence), -1.0, 1.0)
     last_step = Keyword.get(attrs, :last_step, state.last_step)
     last_active_step = Keyword.get(attrs, :last_active_step, state.last_active_step)
 
     {:reply, :ok,
-     %{state | charge: charge, neighbors: neighbors, kind: kind, owners: owners, last_step: last_step, last_active_step: last_active_step}}
+     %{
+       state
+       | charge: charge,
+         valence: valence,
+         neighbors: neighbors,
+         kind: kind,
+         owners: owners,
+         last_step: last_step,
+         last_active_step: last_active_step
+     }}
   end
 
-  defp do_step(state, neighbor_charges, step_count) do
+  defp do_step(state, neighbor_charges, neighbor_valences, step_count) do
     p = state.params
     profile = kind_profile(state.kind)
 
     propagated_charge =
       Enum.reduce(state.neighbors, 0.0, fn {offset, %{weight: weight}}, acc ->
         neighbor_charge = Map.get(neighbor_charges, offset, 0.0)
-        flow = (neighbor_charge - state.charge) * weight * p.propagation_rate * profile.propagation_mult
+
+        flow =
+          (neighbor_charge - state.charge) * weight * p.propagation_rate *
+            profile.propagation_mult
+
+        acc + flow
+      end)
+
+    propagated_valence =
+      Enum.reduce(state.neighbors, 0.0, fn {offset, %{weight: weight}}, acc ->
+        neighbor_valence = Map.get(neighbor_valences, offset, 0.0)
+        flow = (neighbor_valence - state.valence) * weight * p.valence_propagation_rate
         acc + flow
       end)
 
     new_charge = clamp(state.charge + propagated_charge, 0.0, 1.0)
+    new_valence = clamp(state.valence + propagated_valence, -1.0, 1.0)
     am_active = new_charge > p.activation_threshold
 
     neighbors =
@@ -204,6 +259,7 @@ defmodule Wetware.Cell do
 
     charge_decay = min(p.charge_decay * profile.charge_decay_mult, 0.95)
     decayed_charge = clamp(new_charge * (1.0 - charge_decay), 0.0, 1.0)
+    decayed_valence = clamp(new_valence * (1.0 - min(p.valence_decay, 0.95)), -1.0, 1.0)
 
     last_active_step =
       if decayed_charge > p.activation_threshold do
@@ -212,7 +268,15 @@ defmodule Wetware.Cell do
         state.last_active_step
       end
 
-    %{state | charge: decayed_charge, neighbors: neighbors, step_epoch: state.step_epoch + 1, last_step: step_count, last_active_step: last_active_step}
+    %{
+      state
+      | charge: decayed_charge,
+        valence: decayed_valence,
+        neighbors: neighbors,
+        step_epoch: state.step_epoch + 1,
+        last_step: step_count,
+        last_active_step: last_active_step
+    }
   end
 
   defp kind_profile(:concept) do
@@ -229,6 +293,22 @@ defmodule Wetware.Cell do
 
   defp kind_profile(_) do
     %{propagation_mult: 1.0, charge_decay_mult: 1.0, learning_mult: 1.0, weight_decay_mult: 1.0}
+  end
+
+  defp stimulate_state(state, amount, valence) do
+    new_charge = clamp(state.charge + amount, 0.0, 1.0)
+    new_valence = clamp(state.valence + valence * amount, -1.0, 1.0)
+
+    if new_charge > state.params.activation_threshold do
+      %{
+        state
+        | charge: new_charge,
+          valence: new_valence,
+          last_active_step: max(state.last_active_step, state.last_step)
+      }
+    else
+      %{state | charge: new_charge, valence: new_valence}
+    end
   end
 
   defp clamp(v, lo, hi), do: max(lo, min(hi, v))

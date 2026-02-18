@@ -10,7 +10,7 @@ defmodule Mix.Tasks.Wetware.Imprint do
     Wetware.boot()
 
     {opts, positional, _} =
-      OptionParser.parse(args, strict: [steps: :integer, strength: :float])
+      OptionParser.parse(args, strict: [steps: :integer, strength: :float, valence: :float])
 
     concepts =
       positional
@@ -20,13 +20,18 @@ defmodule Mix.Tasks.Wetware.Imprint do
       |> Enum.reject(&(&1 == ""))
 
     if concepts == [] do
-      IO.puts("Usage: mix wetware.imprint \"concept1, concept2\" [--steps N] [--strength F]")
+      IO.puts(
+        "Usage: mix wetware.imprint \"concept1, concept2\" [--steps N] [--strength F] [--valence -1.0..1.0]"
+      )
     else
       imprint_opts =
         []
         |> then(fn o -> if opts[:steps], do: Keyword.put(o, :steps, opts[:steps]), else: o end)
         |> then(fn o ->
           if opts[:strength], do: Keyword.put(o, :strength, opts[:strength]), else: o
+        end)
+        |> then(fn o ->
+          if opts[:valence], do: Keyword.put(o, :valence, opts[:valence]), else: o
         end)
 
       Wetware.imprint(concepts, imprint_opts)

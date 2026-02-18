@@ -394,6 +394,23 @@ defmodule WetwareTest do
       assert Gel.step_count() == before + 3
     end
 
+    test "imprint supports continuous valence in [-1.0, 1.0]" do
+      name = unique_name("valence")
+      _ = register_temp_concept(name, 30, 30, 2)
+
+      before = Concept.valence(name)
+      assert :ok = Resonance.imprint([name], steps: 2, strength: 0.8, valence: -0.75)
+      after_negative = Concept.valence(name)
+
+      assert after_negative < before
+      assert after_negative < 0.0
+
+      assert :ok = Resonance.imprint([name], steps: 1, strength: 0.8, valence: 5.0)
+      after_clamped = Concept.valence(name)
+      assert after_clamped <= 1.0
+      assert after_clamped >= -1.0
+    end
+
     test "imprint step briefing lifecycle" do
       concept_names = ["coding", "research"]
       before_step = Gel.step_count()
