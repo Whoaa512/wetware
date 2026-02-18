@@ -23,7 +23,9 @@ defmodule Wetware.Gel do
     Enum.each(1..n, fn _ -> step() end)
   end
 
-  def ensure_cell(coord, reason \\ :manual, opts \\ []), do: GenServer.call(__MODULE__, {:ensure_cell, coord, reason, opts})
+  def ensure_cell(coord, reason \\ :manual, opts \\ []),
+    do: GenServer.call(__MODULE__, {:ensure_cell, coord, reason, opts})
+
   def despawn_cell(coord), do: GenServer.call(__MODULE__, {:despawn_cell, coord})
 
   def register_concept(concept), do: GenServer.call(__MODULE__, {:register_concept, concept})
@@ -34,7 +36,9 @@ defmodule Wetware.Gel do
   def concept_region(name), do: GenServer.call(__MODULE__, {:concept_region, name})
 
   def concept_cells(name), do: GenServer.call(__MODULE__, {:concept_cells, name})
-  def set_concepts(concepts) when is_map(concepts), do: GenServer.call(__MODULE__, {:set_concepts, concepts})
+
+  def set_concepts(concepts) when is_map(concepts),
+    do: GenServer.call(__MODULE__, {:set_concepts, concepts})
 
   def bounds do
     case Wetware.Gel.Index.bounds() do
@@ -52,7 +56,10 @@ defmodule Wetware.Gel do
   def get_cell(x, y), do: Cell.get_state({x, y})
 
   def step_count, do: GenServer.call(__MODULE__, :step_count)
-  def set_step_count(n) when is_integer(n) and n >= 0, do: GenServer.call(__MODULE__, {:set_step_count, n})
+
+  def set_step_count(n) when is_integer(n) and n >= 0,
+    do: GenServer.call(__MODULE__, {:set_step_count, n})
+
   def params, do: GenServer.call(__MODULE__, :params)
   def reset_cells, do: GenServer.call(__MODULE__, :reset_cells)
 
@@ -62,7 +69,8 @@ defmodule Wetware.Gel do
   end
 
   @impl true
-  def handle_call(:boot, _from, %{started: true} = state), do: {:reply, {:ok, :already_booted}, state}
+  def handle_call(:boot, _from, %{started: true} = state),
+    do: {:reply, {:ok, :already_booted}, state}
 
   def handle_call(:boot, _from, state), do: {:reply, :ok, %{state | started: true}}
 
@@ -109,10 +117,16 @@ defmodule Wetware.Gel do
           do: {x, y}
 
     {_, post_seed_state} =
-      Enum.reduce(coords, {{:ok, :seeded}, %{state | concepts: Map.put(state.concepts, name, info)}}, fn coord, {_, acc_state} ->
-        {_result, next_state} = ensure_cell_impl(coord, :concept_seed, [kind: :concept, owner: name], acc_state)
-        {{:ok, :seeded}, next_state}
-      end)
+      Enum.reduce(
+        coords,
+        {{:ok, :seeded}, %{state | concepts: Map.put(state.concepts, name, info)}},
+        fn coord, {_, acc_state} ->
+          {_result, next_state} =
+            ensure_cell_impl(coord, :concept_seed, [kind: :concept, owner: name], acc_state)
+
+          {{:ok, :seeded}, next_state}
+        end
+      )
 
     reply_concept = Map.merge(concept, %{cx: cx, cy: cy, r: r})
     {:reply, {:ok, reply_concept}, post_seed_state}
@@ -123,19 +137,26 @@ defmodule Wetware.Gel do
   end
 
   def handle_call(:concepts, _from, state), do: {:reply, state.concepts, state}
-  def handle_call({:set_concepts, concepts}, _from, state), do: {:reply, :ok, %{state | concepts: concepts}}
+
+  def handle_call({:set_concepts, concepts}, _from, state),
+    do: {:reply, :ok, %{state | concepts: concepts}}
 
   def handle_call({:concept_region, name}, _from, state) do
     case Map.get(state.concepts, name) do
-      nil -> {:reply, {:error, :not_found}, state}
-      %{center: {cx, cy}, r: r, tags: tags} -> {:reply, %{name: name, cx: cx, cy: cy, r: r, tags: tags}, state}
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      %{center: {cx, cy}, r: r, tags: tags} ->
+        {:reply, %{name: name, cx: cx, cy: cy, r: r, tags: tags}, state}
     end
   end
 
   def handle_call({:concept_cells, name}, _from, state) do
     coords =
       case Map.get(state.concepts, name) do
-        nil -> []
+        nil ->
+          []
+
         %{center: {cx, cy}, r: r} ->
           for y <- (cy - r)..(cy + r),
               x <- (cx - r)..(cx + r),
@@ -146,7 +167,8 @@ defmodule Wetware.Gel do
     {:reply, coords, state}
   end
 
-  def handle_call(:step, _from, %{started: false} = state), do: {:reply, {:error, :not_booted}, state}
+  def handle_call(:step, _from, %{started: false} = state),
+    do: {:reply, {:error, :not_booted}, state}
 
   def handle_call(:step, _from, state) do
     offsets = Params.neighbor_offsets()
@@ -187,7 +209,8 @@ defmodule Wetware.Gel do
     {_, post_spawn_state} =
       Wetware.Gel.Index.take_pending_above(state.params.spawn_threshold)
       |> Enum.reduce({:ok, state}, fn {coord, amount}, {_ok, acc_state} ->
-        {result, next_state} = ensure_cell_impl(coord, :propagation_spawn, [kind: :interstitial], acc_state)
+        {result, next_state} =
+          ensure_cell_impl(coord, :propagation_spawn, [kind: :interstitial], acc_state)
 
         if match?({:ok, _}, result), do: Cell.stimulate(coord, amount)
 
@@ -199,7 +222,8 @@ defmodule Wetware.Gel do
     {:reply, {:ok, new_count}, %{post_spawn_state | step_count: new_count}}
   end
 
-  def handle_call(:get_charges, _from, %{started: false} = state), do: {:reply, {:error, :not_booted}, state}
+  def handle_call(:get_charges, _from, %{started: false} = state),
+    do: {:reply, {:error, :not_booted}, state}
 
   def handle_call(:get_charges, _from, state) do
     charges =
@@ -213,10 +237,32 @@ defmodule Wetware.Gel do
   def handle_call(:step_count, _from, state), do: {:reply, state.step_count, state}
   def handle_call({:set_step_count, n}, _from, state), do: {:reply, :ok, %{state | step_count: n}}
   def handle_call(:params, _from, state), do: {:reply, state.params, state}
+
   def handle_call(:reset_cells, _from, state) do
-    Wetware.Gel.Index.list_cells()
-    |> Enum.each(fn {coord, pid} ->
-      Process.exit(pid, :normal)
+    cells = Wetware.Gel.Index.list_cells()
+
+    pending =
+      Enum.reduce(cells, %{}, fn {coord, pid}, acc ->
+        ref = Process.monitor(pid)
+        Process.exit(pid, :shutdown)
+        Map.put(acc, ref, {coord, pid})
+      end)
+
+    pending = await_cell_shutdown(pending, 2_000)
+
+    if map_size(pending) > 0 do
+      Enum.each(pending, fn {ref, {_coord, pid}} ->
+        Process.demonitor(ref, [:flush])
+
+        if Process.alive?(pid) do
+          Process.exit(pid, :kill)
+        end
+      end)
+
+      _ = await_cell_shutdown(pending, 500)
+    end
+
+    Enum.each(cells, fn {coord, _pid} ->
       :ok = Wetware.Gel.Index.delete_cell(coord)
     end)
 
@@ -236,7 +282,9 @@ defmodule Wetware.Gel do
           (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2,
           reduce: state do
         acc_state ->
-          {result, updated_state} = ensure_cell_impl({x, y}, :region_stimulus, [kind: :interstitial], acc_state)
+          {result, updated_state} =
+            ensure_cell_impl({x, y}, :region_stimulus, [kind: :interstitial], acc_state)
+
           if match?({:ok, _}, result), do: Cell.stimulate({x, y}, strength)
           updated_state
       end
@@ -313,6 +361,25 @@ defmodule Wetware.Gel do
     ]
 
     Cell.restore(pid, Map.get(snapshot, :charge, 0.0), neighbors, attrs)
+  end
+
+  defp await_cell_shutdown(pending, timeout_ms) when map_size(pending) == 0 or timeout_ms <= 0,
+    do: pending
+
+  defp await_cell_shutdown(pending, timeout_ms) do
+    started = System.monotonic_time(:millisecond)
+
+    receive do
+      {:DOWN, ref, :process, _pid, _reason} ->
+        await_cell_shutdown(Map.delete(pending, ref), timeout_ms - elapsed_since(started))
+    after
+      timeout_ms ->
+        pending
+    end
+  end
+
+  defp elapsed_since(started_ms) do
+    max(System.monotonic_time(:millisecond) - started_ms, 0)
   end
 
   defp snapshot_cell(coord, pid) do

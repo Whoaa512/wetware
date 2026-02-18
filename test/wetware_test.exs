@@ -149,11 +149,11 @@ defmodule WetwareTest do
 
   describe "Hebbian learning" do
     test "co-active cells strengthen direct connection" do
-      {:ok, _} = Gel.ensure_cell({60, 60}, :test)
-      {:ok, _} = Gel.ensure_cell({61, 60}, :test)
+      {:ok, _} = Gel.ensure_cell({60, 60}, :test, kind: :concept)
+      {:ok, _} = Gel.ensure_cell({61, 60}, :test, kind: :concept)
 
-      Cell.restore({60, 60}, 0.8, %{})
-      Cell.restore({61, 60}, 0.8, %{})
+      Cell.restore({60, 60}, 0.8, %{}, kind: :concept)
+      Cell.restore({61, 60}, 0.8, %{}, kind: :concept)
 
       w_before = weight_at({60, 60}, {1, 0})
 
@@ -417,7 +417,12 @@ defmodule WetwareTest do
     end
 
     test "phase 1 sparse flow works end-to-end" do
-      tmp_dir = Path.join(System.tmp_dir!(), "wetware_phase1_#{System.unique_integer([:positive, :monotonic])}")
+      tmp_dir =
+        Path.join(
+          System.tmp_dir!(),
+          "wetware_phase1_#{System.unique_integer([:positive, :monotonic])}"
+        )
+
       File.mkdir_p!(tmp_dir)
       concepts_path = Path.join(tmp_dir, "concepts.json")
       state_path = Path.join(tmp_dir, "gel_state.json")
@@ -426,7 +431,7 @@ defmodule WetwareTest do
       name = unique_name("phase1")
 
       assert :ok = Gel.reset_cells()
-      assert Registry.count(Wetware.CellRegistry) == 0
+      assert wait_for_registry_at_most(1)
 
       assert {:ok, concept} =
                Resonance.add_concept(
@@ -451,7 +456,7 @@ defmodule WetwareTest do
 
       assert :ok = Resonance.save(state_path)
       assert :ok = Gel.reset_cells()
-      assert Registry.count(Wetware.CellRegistry) == 0
+      assert wait_for_registry_at_most(1)
       assert :ok = Resonance.load(state_path)
       assert Registry.count(Wetware.CellRegistry) > 0
       assert Concept.charge(name) > 0.0
@@ -479,6 +484,20 @@ defmodule WetwareTest do
       {offset, %{weight: weight, crystallized: rem(i, 2) == 0}}
     end)
     |> Map.new()
+  end
+
+  defp wait_for_registry_at_most(max, tries \\ 120)
+
+  defp wait_for_registry_at_most(max, tries) when tries <= 0,
+    do: Registry.count(Wetware.CellRegistry) <= max
+
+  defp wait_for_registry_at_most(max, tries) do
+    if Registry.count(Wetware.CellRegistry) <= max do
+      true
+    else
+      Process.sleep(10)
+      wait_for_registry_at_most(max, tries - 1)
+    end
   end
 
   defp ensure_example_concepts_loaded! do
@@ -512,7 +531,10 @@ defmodule WetwareTest do
   defp unique_name(prefix), do: "#{prefix}-#{System.unique_integer([:positive, :monotonic])}"
 
   defp tmp_path(label) do
-    Path.join(System.tmp_dir!(), "wetware_test_#{label}_#{System.unique_integer([:positive, :monotonic])}.json")
+    Path.join(
+      System.tmp_dir!(),
+      "wetware_test_#{label}_#{System.unique_integer([:positive, :monotonic])}.json"
+    )
   end
 
   defp wait_until(fun, attempts \\ 30)

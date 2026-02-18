@@ -50,7 +50,8 @@ defmodule Wetware.Concept do
 
   def register_all(concepts) when is_list(concepts) do
     Enum.each(concepts, fn concept ->
-      {:ok, _} = DynamicSupervisor.start_child(Wetware.ConceptSupervisor, {__MODULE__, concept: concept})
+      {:ok, _} =
+        DynamicSupervisor.start_child(Wetware.ConceptSupervisor, {__MODULE__, concept: concept})
     end)
 
     :ok
@@ -82,12 +83,7 @@ defmodule Wetware.Concept do
     else
       total =
         cells
-        |> Enum.map(fn {x, y} ->
-          case Cell.get_state({x, y}) do
-            %{charge: c} -> c
-            _ -> 0.0
-          end
-        end)
+        |> Enum.map(&cell_charge/1)
         |> Enum.sum()
 
       {:reply, total / length(cells), concept}
@@ -118,7 +114,7 @@ defmodule Wetware.Concept do
               nx = x + dx,
               ny = y + dy,
               MapSet.member?(other_cells, {nx, ny}) do
-            case Cell.get_state({x, y}) do
+            case safe_cell_state({x, y}) do
               %{neighbors: neighbors} ->
                 case Map.get(neighbors, {dx, dy}) do
                   %{weight: w} -> w
@@ -169,6 +165,21 @@ defmodule Wetware.Concept do
         x <- (cx - r)..(cx + r),
         (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r do
       {x, y}
+    end
+  end
+
+  defp cell_charge({x, y}) do
+    case safe_cell_state({x, y}) do
+      %{charge: c} -> c
+      _ -> 0.0
+    end
+  end
+
+  defp safe_cell_state({x, y}) do
+    try do
+      Cell.get_state({x, y})
+    catch
+      :exit, _ -> nil
     end
   end
 end
