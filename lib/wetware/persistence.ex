@@ -35,6 +35,7 @@ defmodule Wetware.Persistence do
            "center" => [cx, cy],
            "r" => info.r,
            "tags" => info.tags,
+           "parent" => Map.get(info, :parent),
            "charge" => Float.round(safe_concept_charge(name), 6)
          }}
       end)
@@ -176,7 +177,8 @@ defmodule Wetware.Persistence do
       {cx, cy} = parse_center(info)
       r = info["r"] || info["base_radius"] || info["current_radius"] || 3
       tags = info["tags"] || []
-      {name, %{center: {cx, cy}, r: r, tags: tags}}
+      parent = info["parent"]
+      {name, %{center: {cx, cy}, r: r, tags: tags, parent: parent}}
     end)
     |> Map.new()
   end

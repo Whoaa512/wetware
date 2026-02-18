@@ -267,6 +267,27 @@ defmodule WetwareTest do
 
       assert concept.name == name
     end
+
+    test "supports hierarchical parent-child concept nesting" do
+      parent_name = unique_name("meta")
+      child_name = unique_name("sub")
+
+      _ = register_temp_concept(parent_name, 92, 92, 2, ["meta"])
+
+      child = %Concept{name: child_name, cx: 96, cy: 92, r: 2, tags: ["sub"], parent: parent_name}
+      assert :ok = Concept.register_all([child])
+
+      on_exit(fn ->
+        case Registry.lookup(Wetware.ConceptRegistry, child_name) do
+          [{pid, _}] -> DynamicSupervisor.terminate_child(Wetware.ConceptSupervisor, pid)
+          [] -> :ok
+        end
+      end)
+
+      assert Concept.info(child_name).parent == parent_name
+      assert child_name in Concept.children(parent_name)
+      assert [parent_name] == Concept.ancestry(child_name)
+    end
   end
 
   describe "Associations" do

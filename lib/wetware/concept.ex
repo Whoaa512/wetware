@@ -7,7 +7,7 @@ defmodule Wetware.Concept do
 
   alias Wetware.{Cell, Gel, Params}
 
-  defstruct [:name, :cx, :cy, :r, tags: []]
+  defstruct [:name, :cx, :cy, :r, :parent, tags: []]
 
   @type t :: %__MODULE__{}
 
@@ -27,6 +27,8 @@ defmodule Wetware.Concept do
   def valence(name), do: GenServer.call(via(name), :valence, 15_000)
   def associations(name), do: GenServer.call(via(name), :associations, 30_000)
   def info(name), do: GenServer.call(via(name), :info)
+  def children(name), do: children_of(name)
+  def ancestry(name), do: ancestry_of(name)
 
   def list_all do
     Registry.select(Wetware.ConceptRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
@@ -44,6 +46,7 @@ defmodule Wetware.Concept do
           cx: info["cx"],
           cy: info["cy"],
           r: info["r"] || 3,
+          parent: info["parent"],
           tags: info["tags"] || []
         }
       end)
@@ -203,6 +206,39 @@ defmodule Wetware.Concept do
   defp safe_cell_state({x, y}) do
     try do
       Cell.get_state({x, y})
+    catch
+      :exit, _ -> nil
+    end
+  end
+
+  defp children_of(name) do
+    list_all()
+    |> Enum.map(&safe_info/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.filter(fn concept -> concept.parent == name end)
+    |> Enum.map(& &1.name)
+    |> Enum.sort()
+  end
+
+  defp ancestry_of(name), do: ancestry_of(name, MapSet.new())
+
+  defp ancestry_of(name, seen) do
+    if MapSet.member?(seen, name) do
+      []
+    else
+      case safe_info(name) do
+        %__MODULE__{parent: parent} when is_binary(parent) and parent != "" ->
+          [parent | ancestry_of(parent, MapSet.put(seen, name))]
+
+        _ ->
+          []
+      end
+    end
+  end
+
+  defp safe_info(name) do
+    try do
+      info(name)
     catch
       :exit, _ -> nil
     end

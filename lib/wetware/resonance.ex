@@ -49,6 +49,7 @@ defmodule Wetware.Resonance do
       cx: Map.get(attrs, :cx),
       cy: Map.get(attrs, :cy),
       r: Map.get(attrs, :r, 3),
+      parent: Map.get(attrs, :parent),
       tags: Map.get(attrs, :tags, [])
     }
 
@@ -354,7 +355,8 @@ defmodule Wetware.Resonance do
 
       updated =
         Map.put(concepts, concept.name, %{
-          "tags" => concept.tags
+          "tags" => concept.tags,
+          "parent" => concept.parent
         })
 
       File.write!(

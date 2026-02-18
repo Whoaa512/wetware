@@ -104,6 +104,7 @@ defmodule Wetware.Gel do
     name = concept.name
     tags = Map.get(concept, :tags, [])
     r = Map.get(concept, :r, 3)
+    parent = Map.get(concept, :parent)
 
     {cx, cy} =
       cond do
@@ -114,7 +115,7 @@ defmodule Wetware.Gel do
           Wetware.Layout.Engine.place(name, tags, state.concepts)
       end
 
-    info = %{center: {cx, cy}, r: r, tags: tags}
+    info = %{center: {cx, cy}, r: r, tags: tags, parent: parent}
 
     coords =
       for y <- (cy - r)..(cy + r),
@@ -152,8 +153,8 @@ defmodule Wetware.Gel do
       nil ->
         {:reply, {:error, :not_found}, state}
 
-      %{center: {cx, cy}, r: r, tags: tags} ->
-        {:reply, %{name: name, cx: cx, cy: cy, r: r, tags: tags}, state}
+      %{center: {cx, cy}, r: r, tags: tags, parent: parent} ->
+        {:reply, %{name: name, cx: cx, cy: cy, r: r, tags: tags, parent: parent}, state}
     end
   end
 
