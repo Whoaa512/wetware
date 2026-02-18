@@ -32,15 +32,15 @@ defmodule Wetware.InitTest do
     assert File.exists?(tmp_dir)
     assert File.exists?(Path.join(tmp_dir, "concepts.json"))
 
-    # Verify valid JSON with concepts
+    # Verify valid JSON with empty concepts by default
     {:ok, data} = File.read(Path.join(tmp_dir, "concepts.json"))
     {:ok, decoded} = Jason.decode(data)
     concepts = decoded["concepts"]
-    assert map_size(concepts) > 0
+    assert map_size(concepts) == 0
 
     # Check output mentions initialization
     assert output =~ "initialized"
-    assert output =~ "starter concepts"
+    assert output =~ "empty by default"
   end
 
   test "init is idempotent — second run reports already initialized", %{tmp_dir: tmp_dir} do
@@ -60,19 +60,19 @@ defmodule Wetware.InitTest do
     assert original == after_second
   end
 
-  test "init on empty concepts.json re-scaffolds", %{tmp_dir: tmp_dir} do
-    # Create dir with empty concepts file
+  test "init repairs invalid concepts.json", %{tmp_dir: tmp_dir} do
+    # Create dir with invalid concepts file
     File.mkdir_p!(tmp_dir)
-    File.write!(Path.join(tmp_dir, "concepts.json"), ~s({"concepts": {}}))
+    File.write!(Path.join(tmp_dir, "concepts.json"), ~s({"broken": true}))
 
     output = capture_init()
 
-    # Should re-scaffold since concepts are empty
+    # Should re-scaffold with empty concepts
     assert output =~ "initialized"
 
     {:ok, data} = File.read(Path.join(tmp_dir, "concepts.json"))
     {:ok, decoded} = Jason.decode(data)
-    assert map_size(decoded["concepts"]) > 0
+    assert map_size(decoded["concepts"]) == 0
   end
 
   defp capture_init do

@@ -3,11 +3,6 @@ defmodule Wetware.CLI do
 
   alias Wetware.{DataPaths, Discovery, Pruning, Resonance, Viz}
 
-  # Embed default concepts at compile time so init works from the escript
-  @default_concepts File.read!(
-                      Path.expand("example/concepts.json", __DIR__ |> Path.join("../.."))
-                    )
-
   def main(argv) do
     Application.ensure_all_started(:wetware)
 
@@ -55,115 +50,28 @@ defmodule Wetware.CLI do
     force = Keyword.get(opts, :force, false)
     data_dir = DataPaths.data_dir()
     concepts_path = DataPaths.concepts_path()
-
-    already_exists = File.exists?(concepts_path)
-
-    gel_exists = File.exists?(DataPaths.gel_state_path())
+    concepts_exists = File.exists?(concepts_path)
 
     cond do
       force ->
-        # Force overwrite with starters
-        File.mkdir_p!(data_dir)
-        File.write!(concepts_path, @default_concepts)
+        write_empty_concepts!(data_dir, concepts_path)
+        print_init_banner("re-initialized", data_dir, concepts_path)
 
+      concepts_exists and valid_concepts_file?(concepts_path) ->
         concept_count = count_concepts(concepts_path)
-
-        IO.puts("")
-
-        IO.puts(
-          "#{IO.ANSI.green()}🧬 Wetware re-initialized with starter concepts#{IO.ANSI.reset()}"
-        )
-
-        IO.puts("  Concepts: #{concept_count}")
-        IO.puts("")
-
-      already_exists and has_concepts?(concepts_path) ->
-        IO.puts("")
-        IO.puts("#{IO.ANSI.green()}✓ Wetware is already initialized#{IO.ANSI.reset()}")
-        IO.puts("  Data dir: #{data_dir}")
-
-        concept_count = count_concepts(concepts_path)
-        IO.puts("  Concepts: #{concept_count}")
-
-        if gel_exists do
-          IO.puts("  Gel state: saved")
-        else
-          IO.puts(
-            "  Gel state: not yet (run #{IO.ANSI.cyan()}wetware imprint#{IO.ANSI.reset()} to start)"
-          )
-        end
-
-        IO.puts("")
-        IO.puts("  Run #{IO.ANSI.cyan()}wetware status#{IO.ANSI.reset()} for full details.")
-        IO.puts("")
-
-      already_exists and gel_exists and not has_concepts?(concepts_path) ->
-        # concepts.json exists but is empty, while gel state exists — something went wrong
-        IO.puts("")
-
-        IO.puts(
-          "#{IO.ANSI.yellow()}⚠ Concepts file is empty but gel state exists#{IO.ANSI.reset()}"
-        )
-
-        IO.puts("  Data dir: #{data_dir}")
-        IO.puts("")
-        IO.puts("  This usually means concepts were cleared accidentally.")
-        IO.puts("  Your gel state (#{DataPaths.gel_state_path()}) is intact.")
-        IO.puts("")
-        IO.puts("  To restore, copy your concepts back into:")
-        IO.puts("    #{concepts_path}")
-        IO.puts("")
-        IO.puts("  Or to start fresh with starter concepts, run:")
-        IO.puts("    #{IO.ANSI.cyan()}wetware init --force#{IO.ANSI.reset()}")
-        IO.puts("")
+        print_already_initialized(data_dir, concept_count)
 
       true ->
-        # Scaffold the data directory
-        File.mkdir_p!(data_dir)
-
-        # Write the starter concepts
-        File.write!(concepts_path, @default_concepts)
-
-        concept_count = count_concepts(concepts_path)
-
-        IO.puts("")
-        IO.puts("#{IO.ANSI.green()}🧬 Wetware initialized!#{IO.ANSI.reset()}")
-        IO.puts("")
-        IO.puts("  Data dir:  #{data_dir}")
-        IO.puts("  Concepts:  #{concept_count} starter concepts loaded")
-        IO.puts("")
-        IO.puts("  #{IO.ANSI.bright()}What's here:#{IO.ANSI.reset()}")
-        IO.puts("  #{data_dir}/concepts.json — your concept definitions")
-        IO.puts("  Edit this file to add your own concepts, or use:")
-
-        IO.puts(
-          "    #{IO.ANSI.cyan()}wetware discover#{IO.ANSI.reset()} to auto-discover from text"
-        )
-
-        IO.puts("")
-        IO.puts("  #{IO.ANSI.bright()}Next steps:#{IO.ANSI.reset()}")
-
-        IO.puts(
-          "    #{IO.ANSI.cyan()}wetware imprint \"coding, creativity\"#{IO.ANSI.reset()}  — stimulate concepts"
-        )
-
-        IO.puts(
-          "    #{IO.ANSI.cyan()}wetware dream --steps 20#{IO.ANSI.reset()}             — let the gel find connections"
-        )
-
-        IO.puts(
-          "    #{IO.ANSI.cyan()}wetware briefing#{IO.ANSI.reset()}                     — see what's resonating"
-        )
-
-        IO.puts("")
+        write_empty_concepts!(data_dir, concepts_path)
+        print_init_banner("initialized", data_dir, concepts_path)
     end
   end
 
-  defp has_concepts?(path) do
+  defp valid_concepts_file?(path) do
     case File.read(path) do
       {:ok, data} ->
         case Jason.decode(data) do
-          {:ok, %{"concepts" => concepts}} when map_size(concepts) > 0 -> true
+          {:ok, %{"concepts" => concepts}} when is_map(concepts) -> true
           _ -> false
         end
 
@@ -183,6 +91,40 @@ defmodule Wetware.CLI do
       _ ->
         0
     end
+  end
+
+  defp write_empty_concepts!(data_dir, concepts_path) do
+    File.mkdir_p!(data_dir)
+    File.write!(concepts_path, Jason.encode!(%{"concepts" => %{}}, pretty: true))
+  end
+
+  defp print_init_banner(mode, data_dir, concepts_path) do
+    IO.puts("")
+    IO.puts("#{IO.ANSI.green()}🧬 Wetware #{mode}!#{IO.ANSI.reset()}")
+    IO.puts("")
+    IO.puts("  Data dir:  #{data_dir}")
+    IO.puts("  Concepts:  0 (empty by default)")
+    IO.puts("")
+    IO.puts("  #{IO.ANSI.bright()}What's here:#{IO.ANSI.reset()}")
+    IO.puts("  #{concepts_path} — your concept definitions")
+    IO.puts("")
+    IO.puts("  Add concepts manually or run:")
+
+    IO.puts(
+      "    #{IO.ANSI.cyan()}wetware discover \"text to extract concepts from\"#{IO.ANSI.reset()}"
+    )
+
+    IO.puts("")
+  end
+
+  defp print_already_initialized(data_dir, concept_count) do
+    IO.puts("")
+    IO.puts("#{IO.ANSI.green()}✓ Wetware is already initialized#{IO.ANSI.reset()}")
+    IO.puts("  Data dir: #{data_dir}")
+    IO.puts("  Concepts: #{concept_count}")
+    IO.puts("")
+    IO.puts("  Run #{IO.ANSI.cyan()}wetware status#{IO.ANSI.reset()} for full details.")
+    IO.puts("")
   end
 
   defp cmd_briefing, do: Resonance.print_briefing()
@@ -346,7 +288,7 @@ defmodule Wetware.CLI do
       wetware <command> [options]
 
     #{IO.ANSI.bright()}COMMANDS:#{IO.ANSI.reset()}
-      init                            Set up data dir with starter concepts
+      init                            Set up data dir with empty concepts.json
       briefing                        Show resonance briefing
       concepts                        List concepts and charge levels
       imprint \"concept1, concept2\"    Stimulate concepts
