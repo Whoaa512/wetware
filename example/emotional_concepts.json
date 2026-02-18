@@ -1,0 +1,25 @@
+{
+  "concepts": {
+    "care": {
+      "tags": ["domain:emotional", "emotion:care", "support", "attunement"]
+    },
+    "tension": {
+      "tags": ["domain:emotional", "emotion:tension", "misalignment", "stress"]
+    },
+    "repair": {
+      "tags": ["domain:relational", "relation:repair", "apology", "recovery"]
+    },
+    "trust": {
+      "tags": ["domain:relational", "relation:trust", "reliability", "safety"]
+    },
+    "breakthrough": {
+      "tags": ["domain:emotional", "emotion:joy", "momentum", "progress"]
+    },
+    "overload": {
+      "tags": ["domain:emotional", "emotion:fatigue", "capacity", "bandwidth"]
+    },
+    "boundaries": {
+      "tags": ["domain:relational", "relation:boundaries", "clarity", "limits"]
+    }
+  }
+}

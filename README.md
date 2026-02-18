@@ -222,6 +222,11 @@ openclaw system event --mode now --text "Wetware: completed task, imprinting key
 
 Concepts are loaded from `concepts.json` in your data directory. Each concept is a named circular region of the gel with spatial coordinates and semantic tags. See [`example/concepts.json`](example/concepts.json) for a starter set.
 
+For emotional/relational taxonomy design, see:
+
+- `docs/EMOTIONAL-LAYER-DESIGN.md`
+- `example/emotional_concepts.json`
+
 ## Design Principles
 
 1. **Process-per-cell** — 6400 processes is nothing for BEAM (it handles millions)
