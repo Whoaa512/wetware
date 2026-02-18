@@ -1,7 +1,7 @@
 defmodule Wetware.Resonance do
   @moduledoc "Main API for imprinting, dreaming, briefing, and persistence."
 
-  alias Wetware.{Concept, DataPaths, EmotionalBias, Gel, Persistence}
+  alias Wetware.{Concept, DataPaths, EmotionalBias, Gel, Persistence, Priming}
 
   @dormancy_table :wetware_dormancy
 
@@ -113,12 +113,15 @@ defmodule Wetware.Resonance do
       |> Enum.filter(fn {_name, %{charge: c}} -> c <= 0.01 end)
       |> Enum.map(fn {name, _} -> name end)
 
+    disposition_hints = Priming.hints(concept_states)
+
     %{
       step_count: Gel.step_count(),
       total_concepts: length(concepts),
       active: active,
       warm: warm,
-      dormant: dormant
+      dormant: dormant,
+      disposition_hints: disposition_hints
     }
   end
 

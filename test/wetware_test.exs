@@ -384,6 +384,7 @@ defmodule WetwareTest do
       assert is_list(b.active)
       assert is_list(b.warm)
       assert is_list(b.dormant)
+      assert is_list(b.disposition_hints)
     end
 
     test "dream mode advances steps and returns echoes" do
