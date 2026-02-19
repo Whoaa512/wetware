@@ -20,7 +20,10 @@ defmodule Wetware.Gel.Index do
 
   def put_cell(coord, pid), do: GenServer.call(__MODULE__, {:put_cell, coord, pid})
   def delete_cell(coord), do: GenServer.call(__MODULE__, {:delete_cell, coord})
-  def put_snapshot(coord, snapshot), do: GenServer.call(__MODULE__, {:put_snapshot, coord, snapshot})
+
+  def put_snapshot(coord, snapshot),
+    do: GenServer.call(__MODULE__, {:put_snapshot, coord, snapshot})
+
   def delete_snapshot(coord), do: GenServer.call(__MODULE__, {:delete_snapshot, coord})
   def take_snapshot(coord), do: GenServer.call(__MODULE__, {:take_snapshot, coord})
   def clear_snapshots, do: GenServer.call(__MODULE__, :clear_snapshots)
@@ -67,7 +70,9 @@ defmodule Wetware.Gel.Index do
   end
 
   def add_pending(coord, amount), do: GenServer.call(__MODULE__, {:add_pending, coord, amount})
-  def take_pending_above(threshold), do: GenServer.call(__MODULE__, {:take_pending_above, threshold})
+
+  def take_pending_above(threshold),
+    do: GenServer.call(__MODULE__, {:take_pending_above, threshold})
 
   @impl true
   def init(_) do
@@ -85,8 +90,16 @@ defmodule Wetware.Gel.Index do
 
     bounds =
       case bounds() do
-        nil -> %{min_x: x, max_x: x, min_y: y, max_y: y}
-        b -> %{min_x: min(b.min_x, x), max_x: max(b.max_x, x), min_y: min(b.min_y, y), max_y: max(b.max_y, y)}
+        nil ->
+          %{min_x: x, max_x: x, min_y: y, max_y: y}
+
+        b ->
+          %{
+            min_x: min(b.min_x, x),
+            max_x: max(b.max_x, x),
+            min_y: min(b.min_y, y),
+            max_y: max(b.max_y, y)
+          }
       end
 
     :ets.insert(@bounds_table, {:bounds, bounds})
@@ -161,11 +174,18 @@ defmodule Wetware.Gel.Index do
 
   defp recompute_bounds_now do
     case list_coords() do
-      [] -> :ets.delete(@bounds_table, :bounds)
+      [] ->
+        :ets.delete(@bounds_table, :bounds)
+
       [{x, y} | rest] ->
         bounds =
           Enum.reduce(rest, %{min_x: x, max_x: x, min_y: y, max_y: y}, fn {cx, cy}, acc ->
-            %{min_x: min(acc.min_x, cx), max_x: max(acc.max_x, cx), min_y: min(acc.min_y, cy), max_y: max(acc.max_y, cy)}
+            %{
+              min_x: min(acc.min_x, cx),
+              max_x: max(acc.max_x, cx),
+              min_y: min(acc.min_y, cy),
+              max_y: max(acc.max_y, cy)
+            }
           end)
 
         :ets.insert(@bounds_table, {:bounds, bounds})

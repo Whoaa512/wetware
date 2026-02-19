@@ -29,7 +29,9 @@ defmodule Mix.Tasks.Wetware.Migrate do
   end
 
   defp to_sparse(%{"version" => "elixir-v3-sparse"} = state), do: {:ok, state}
-  defp to_sparse(%{"version" => "elixir-v2"} = state), do: {:ok, V2Migration.to_sparse_state(state)}
+
+  defp to_sparse(%{"version" => "elixir-v2"} = state),
+    do: {:ok, V2Migration.to_sparse_state(state)}
 
   defp to_sparse(state) when is_map(state) do
     if Map.has_key?(state, "charges") do

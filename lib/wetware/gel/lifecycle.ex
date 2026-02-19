@@ -44,7 +44,14 @@ defmodule Wetware.Gel.Lifecycle do
         %{kind: :concept} ->
           :ok
 
-        %{kind: kind, owners: owners, last_active_step: last_active, charge: charge, neighbors: neighbors, last_step: last_step} ->
+        %{
+          kind: kind,
+          owners: owners,
+          last_active_step: last_active,
+          charge: charge,
+          neighbors: neighbors,
+          last_step: last_step
+        } ->
           dormant_steps = max(current_step - last_active, 0)
           crystallized? = Enum.any?(neighbors, fn {_k, v} -> Map.get(v, :crystallized, false) end)
 

@@ -37,7 +37,9 @@ defmodule Wetware.Layout.Proximity do
 
     existing
     |> Enum.map(fn {_name, info} ->
-      overlap = MapSet.intersection(tag_set, MapSet.new(Map.get(info, :tags, []))) |> MapSet.size()
+      overlap =
+        MapSet.intersection(tag_set, MapSet.new(Map.get(info, :tags, []))) |> MapSet.size()
+
       {info, overlap}
     end)
     |> Enum.sort_by(fn {_info, overlap} -> -overlap end)

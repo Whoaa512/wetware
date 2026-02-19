@@ -4,6 +4,9 @@ defmodule Wetware.Persistence do
   alias Wetware.{Cell, DataPaths, Gel, Params}
 
   @default_path DataPaths.gel_state_path()
+  # Cells below this charge threshold are restored as snapshots, not live processes.
+  # This prevents spawning 100K+ BEAM processes at startup for dormant cells.
+  @restore_charge_threshold 0.01
 
   def save(path \\ @default_path) do
     p = Gel.params()
@@ -150,14 +153,14 @@ defmodule Wetware.Persistence do
 
     cells = state["cells"] || %{}
 
+    # Restore cells selectively: concept cells and cells with significant charge
+    # become live processes. Dormant interstitial cells are stored as snapshots
+    # to avoid spawning 100K+ processes at startup. They'll be restored on demand
+    # when neighboring cells propagate charge to them.
     Enum.each(cells, fn {key, data} ->
       {x, y} = parse_coord_key(key)
-
-      {:ok, _pid} =
-        Gel.ensure_cell({x, y}, :restore,
-          kind: parse_kind(data["kind"]),
-          owners: data["owners"] || []
-        )
+      kind = parse_kind(data["kind"])
+      charge = data["charge"] || 0.0
 
       weights_map =
         (data["neighbors"] || %{})
@@ -167,13 +170,35 @@ defmodule Wetware.Persistence do
         end)
         |> Map.new()
 
-      Cell.restore({x, y}, data["charge"] || 0.0, weights_map,
-        kind: parse_kind(data["kind"]),
-        owners: data["owners"] || [],
-        valence: data["valence"] || 0.0,
-        last_step: data["last_step"] || step_count,
-        last_active_step: data["last_active_step"] || step_count
-      )
+      if kind == :concept or charge > @restore_charge_threshold do
+        # Spawn as live process — this cell is active or structurally important
+        {:ok, _pid} =
+          Gel.ensure_cell({x, y}, :restore,
+            kind: kind,
+            owners: data["owners"] || []
+          )
+
+        Cell.restore({x, y}, charge, weights_map,
+          kind: kind,
+          owners: data["owners"] || [],
+          valence: data["valence"] || 0.0,
+          last_step: data["last_step"] || step_count,
+          last_active_step: data["last_active_step"] || step_count
+        )
+      else
+        # Store as snapshot — will be restored on demand when needed
+        snapshot = %{
+          charge: charge,
+          valence: data["valence"] || 0.0,
+          kind: kind,
+          owners: data["owners"] || [],
+          neighbors: weights_map,
+          last_step: data["last_step"] || step_count,
+          last_active_step: data["last_active_step"] || step_count
+        }
+
+        Wetware.Gel.Index.put_snapshot({x, y}, snapshot)
+      end
     end)
 
     case state["associations"] do
