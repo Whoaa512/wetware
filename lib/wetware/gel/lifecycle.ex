@@ -1,5 +1,6 @@
 defmodule Wetware.Gel.Lifecycle do
   alias Wetware.Util
+
   @moduledoc """
   Periodic sparse-cell lifecycle sweeps.
 
@@ -41,7 +42,7 @@ defmodule Wetware.Gel.Lifecycle do
 
     Wetware.Gel.Index.list_cells()
     |> Enum.each(fn {{x, y}, pid} ->
-      case Util.safe_exit(fn -> Cell.get_state(pid) end, nil) do
+      case safe_cell_state(pid) do
         %{kind: :concept} ->
           :ok
 
@@ -75,6 +76,22 @@ defmodule Wetware.Gel.Lifecycle do
           :ok
       end
     end)
+  end
+
+  defp safe_cell_state(pid) when not is_pid(pid), do: nil
+
+  defp safe_cell_state(pid) do
+    if Process.alive?(pid) do
+      try do
+        Cell.get_state(pid)
+      rescue
+        _ -> nil
+      catch
+        :exit, _ -> nil
+      end
+    else
+      nil
+    end
   end
 
   defp schedule_sweep, do: Process.send_after(self(), :sweep, @sweep_interval_ms)
