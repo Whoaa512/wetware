@@ -1,5 +1,6 @@
 defmodule Wetware.Gel do
   alias Wetware.Util
+
   @moduledoc """
   Sparse, on-demand gel substrate.
   """
@@ -308,13 +309,53 @@ defmodule Wetware.Gel do
   end
 
   defp execute_step_pipeline(state, new_count) do
-    base_offsets = Params.neighbor_offsets(state.params)
+    state
+    |> build_step_context(new_count)
+    |> run_cell_step_phase()
+    |> reshape_topology_phase()
+    |> finalize_step_pipeline()
+  end
+
+  defp build_step_context(state, new_count) do
     cells = Wetware.Gel.Index.list_cells()
     {signal_map, cell_state_map} = build_step_maps(cells)
 
-    run_step_tasks(cells, signal_map, cell_state_map, base_offsets, state.params, new_count)
-    maybe_reshape_topology(cells, cell_state_map, new_count, state.params)
+    %{
+      state: state,
+      new_count: new_count,
+      params: state.params,
+      base_offsets: Params.neighbor_offsets(state.params),
+      cells: cells,
+      signal_map: signal_map,
+      cell_state_map: cell_state_map
+    }
+  end
 
+  defp run_cell_step_phase(context) do
+    run_step_tasks(
+      context.cells,
+      context.signal_map,
+      context.cell_state_map,
+      context.base_offsets,
+      context.params,
+      context.new_count
+    )
+
+    context
+  end
+
+  defp reshape_topology_phase(context) do
+    maybe_reshape_topology(
+      context.cells,
+      context.cell_state_map,
+      context.new_count,
+      context.params
+    )
+
+    context
+  end
+
+  defp finalize_step_pipeline(%{state: state, new_count: new_count}) do
     state
     |> spawn_pending_cells()
     |> maybe_cluster_concepts(new_count)
