@@ -27,7 +27,7 @@ defmodule Wetware.VizHttpTest do
 
     state_response = response_for(port, "GET /api/state HTTP/1.1\r\nhost: 127.0.0.1\r\n\r\n")
     assert state_response =~ "HTTP/1.1 200 OK"
-    assert state_response =~ "\"step_count\""
+    assert state_response =~ "\"cells\""
   end
 
   defp response_for(port, request) do
