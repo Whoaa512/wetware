@@ -1,5 +1,6 @@
 defmodule Wetware.AutoImprint do
   alias Wetware.Util
+
   @moduledoc """
   Heuristic auto-imprint pipeline for conversation summaries/transcripts.
 
@@ -10,6 +11,7 @@ defmodule Wetware.AutoImprint do
 
   @negative_terms ~w(conflict tension hard overwhelmed blocked anxious frustrated upset drained stress)
   @positive_terms ~w(breakthrough progress clear resolved grateful calm trust aligned excited momentum)
+  @phrase_regex_cache_key {__MODULE__, :phrase_regex_cache}
   @precompiled_phrase_regexes (@negative_terms ++ @positive_terms)
                               |> Enum.uniq()
                               |> Map.new(fn term ->
@@ -101,21 +103,43 @@ defmodule Wetware.AutoImprint do
 
   defp count_phrase(text, phrase) do
     lowered_phrase = String.downcase(phrase)
-
-    regex =
-      Map.get_lazy(@precompiled_phrase_regexes, lowered_phrase, fn ->
-        escaped = Regex.escape(lowered_phrase)
-
-        case Regex.compile("\\b#{escaped}\\b", "u") do
-          {:ok, compiled} -> compiled
-          {:error, _} -> nil
-        end
-      end)
+    regex = cached_phrase_regex(lowered_phrase)
 
     if regex do
       Regex.scan(regex, text) |> length()
     else
       0
+    end
+  end
+
+  defp cached_phrase_regex(lowered_phrase) do
+    case Map.fetch(@precompiled_phrase_regexes, lowered_phrase) do
+      {:ok, regex} ->
+        regex
+
+      :error ->
+        cache = :persistent_term.get(@phrase_regex_cache_key, %{})
+
+        case Map.fetch(cache, lowered_phrase) do
+          {:ok, regex} ->
+            regex
+
+          :error ->
+            escaped = Regex.escape(lowered_phrase)
+
+            case Regex.compile("\\b#{escaped}\\b", "u") do
+              {:ok, compiled} ->
+                :persistent_term.put(
+                  @phrase_regex_cache_key,
+                  Map.put(cache, lowered_phrase, compiled)
+                )
+
+                compiled
+
+              {:error, _} ->
+                nil
+            end
+        end
     end
   end
 
