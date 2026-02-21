@@ -1,5 +1,6 @@
 defmodule Wetware.Viz do
   alias Wetware.Util
+
   @moduledoc """
   Lightweight local HTTP server for live gel visualization.
 
@@ -20,10 +21,10 @@ defmodule Wetware.Viz do
 
     case :gen_tcp.listen(port, [
            :binary,
+           {:ip, {127, 0, 0, 1}},
            packet: :raw,
            active: false,
-           reuseaddr: true,
-           ip: {127, 0, 0, 1}
+           reuseaddr: true
          ]) do
       {:ok, listener} ->
         IO.puts("Wetware viz listening on http://127.0.0.1:#{port}")
