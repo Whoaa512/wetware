@@ -1,11 +1,12 @@
 defmodule Wetware.Gel do
+  alias Wetware.Util
   @moduledoc """
   Sparse, on-demand gel substrate.
   """
 
   use GenServer
 
-  alias Wetware.{Cell, Params, Resonance}
+  alias Wetware.{Cell, Params, Resonance, Util}
   @reshape_interval 4
   @reshape_max_offset 4
   @cluster_interval 8
@@ -183,83 +184,9 @@ defmodule Wetware.Gel do
     do: {:reply, {:error, :not_booted}, state}
 
   def handle_call(:step, _from, state) do
-    base_offsets = Params.neighbor_offsets(state.params)
-    cells = Wetware.Gel.Index.list_cells()
-
-    {signal_map, cell_state_map} =
-      cells
-      |> Enum.map(fn {coord, pid} ->
-        cell_state = Cell.get_state(pid)
-
-        {coord,
-         {%{
-            charge: Map.get(cell_state, :charge, 0.0),
-            valence: Map.get(cell_state, :valence, 0.0)
-          }, cell_state}}
-      end)
-      |> Enum.reduce({%{}, %{}}, fn {coord, {signal, cell_state}}, {signals, states} ->
-        {Map.put(signals, coord, signal), Map.put(states, coord, cell_state)}
-      end)
-
     new_count = state.step_count + 1
-
-    tasks =
-      Enum.map(cells, fn {{x, y} = coord, pid} ->
-        source_state = Map.get(cell_state_map, coord, %{neighbors: %{}})
-        offsets = source_state.neighbors |> Map.keys()
-
-        neighbor_charges =
-          for {dx, dy} <- offsets,
-              into: %{} do
-            ncoord = {x + dx, y + dy}
-            {{dx, dy}, get_in(signal_map, [ncoord, :charge]) || 0.0}
-          end
-
-        neighbor_valences =
-          for {dx, dy} <- offsets,
-              into: %{} do
-            ncoord = {x + dx, y + dy}
-            {{dx, dy}, get_in(signal_map, [ncoord, :valence]) || 0.0}
-          end
-
-        # Deposit pending input into empty neighbors for on-demand spawning.
-        coord_charge = get_in(signal_map, [coord, :charge]) || 0.0
-
-        if coord_charge > state.params.activation_threshold do
-          Enum.each(base_offsets, fn {dy, dx} ->
-            target = {x + dx, y + dy}
-
-            if not Map.has_key?(signal_map, target) do
-              Wetware.Gel.Index.add_pending(target, coord_charge * 0.03)
-            end
-          end)
-        end
-
-        Task.async(fn ->
-          Cell.step_with_charges(pid, neighbor_charges, neighbor_valences, new_count)
-        end)
-      end)
-
-    Task.await_many(tasks, 30_000)
-    maybe_reshape_topology(cells, cell_state_map, new_count, state.params)
-
-    {_, post_spawn_state} =
-      Wetware.Gel.Index.take_pending_above(state.params.spawn_threshold)
-      |> Enum.reduce({:ok, state}, fn {coord, amount}, {_ok, acc_state} ->
-        {result, next_state} =
-          ensure_cell_impl(coord, :propagation_spawn, [kind: :interstitial], acc_state)
-
-        if match?({:ok, _}, result), do: Cell.stimulate(coord, amount)
-
-        {result, next_state}
-      end)
-
-    post_cluster_state = maybe_cluster_concepts(post_spawn_state, new_count)
-    post_region_state = maybe_adapt_concept_regions(post_cluster_state, new_count)
-    Wetware.Associations.decay_step()
-    Resonance.observe_step(new_count)
-    Wetware.Gel.Lifecycle.tick(new_count)
-    {:reply, {:ok, new_count}, %{post_region_state | step_count: new_count}}
+    stepped_state = execute_step_pipeline(state, new_count)
+    {:reply, {:ok, new_count}, %{stepped_state | step_count: new_count}}
   end
 
   def handle_call(:get_charges, _from, %{started: false} = state),
@@ -378,6 +305,112 @@ defmodule Wetware.Gel do
             {{:error, reason}, state}
         end
     end
+  end
+
+  defp execute_step_pipeline(state, new_count) do
+    base_offsets = Params.neighbor_offsets(state.params)
+    cells = Wetware.Gel.Index.list_cells()
+    {signal_map, cell_state_map} = build_step_maps(cells)
+
+    run_step_tasks(cells, signal_map, cell_state_map, base_offsets, state.params, new_count)
+    maybe_reshape_topology(cells, cell_state_map, new_count, state.params)
+
+    state
+    |> spawn_pending_cells()
+    |> maybe_cluster_concepts(new_count)
+    |> maybe_adapt_concept_regions(new_count)
+    |> finalize_step(new_count)
+  end
+
+  defp build_step_maps(cells) do
+    cells
+    |> Enum.map(fn {coord, pid} ->
+      cell_state = Cell.get_state(pid)
+
+      {coord,
+       {%{
+          charge: Map.get(cell_state, :charge, 0.0),
+          valence: Map.get(cell_state, :valence, 0.0)
+        }, cell_state}}
+    end)
+    |> Enum.reduce({%{}, %{}}, fn {coord, {signal, cell_state}}, {signals, states} ->
+      {Map.put(signals, coord, signal), Map.put(states, coord, cell_state)}
+    end)
+  end
+
+  defp run_step_tasks(cells, signal_map, cell_state_map, base_offsets, params, new_count) do
+    tasks =
+      Enum.map(cells, fn {{x, y} = coord, pid} ->
+        source_state = Map.get(cell_state_map, coord, %{neighbors: %{}})
+        offsets = Map.keys(source_state.neighbors)
+
+        neighbor_charges =
+          for {dx, dy} <- offsets, into: %{} do
+            ncoord = {x + dx, y + dy}
+            {{dx, dy}, get_in(signal_map, [ncoord, :charge]) || 0.0}
+          end
+
+        neighbor_valences =
+          for {dx, dy} <- offsets, into: %{} do
+            ncoord = {x + dx, y + dy}
+            {{dx, dy}, get_in(signal_map, [ncoord, :valence]) || 0.0}
+          end
+
+        maybe_seed_pending_neighbors(
+          coord,
+          {x, y},
+          signal_map,
+          base_offsets,
+          params.activation_threshold
+        )
+
+        Task.async(fn ->
+          Cell.step_with_charges(pid, neighbor_charges, neighbor_valences, new_count)
+        end)
+      end)
+
+    Task.await_many(tasks, 30_000)
+  end
+
+  defp maybe_seed_pending_neighbors(
+         coord,
+         {x, y},
+         signal_map,
+         base_offsets,
+         activation_threshold
+       ) do
+    coord_charge = get_in(signal_map, [coord, :charge]) || 0.0
+
+    if coord_charge > activation_threshold do
+      Enum.each(base_offsets, fn {dy, dx} ->
+        target = {x + dx, y + dy}
+
+        if not Map.has_key?(signal_map, target) do
+          Wetware.Gel.Index.add_pending(target, coord_charge * 0.03)
+        end
+      end)
+    end
+  end
+
+  defp spawn_pending_cells(state) do
+    {_, post_spawn_state} =
+      Wetware.Gel.Index.take_pending_above(state.params.spawn_threshold)
+      |> Enum.reduce({:ok, state}, fn {coord, amount}, {_ok, acc_state} ->
+        {result, next_state} =
+          ensure_cell_impl(coord, :propagation_spawn, [kind: :interstitial], acc_state)
+
+        if match?({:ok, _}, result), do: Cell.stimulate(coord, amount)
+        {result, next_state}
+      end)
+
+    post_spawn_state
+  end
+
+  defp finalize_step(state, new_count) do
+    Wetware.Associations.decay_step()
+    Resonance.observe_step(new_count)
+    Wetware.Gel.Lifecycle.tick(new_count)
+    state
   end
 
   defp maybe_apply_cell_attrs(pid, opts) do
@@ -651,18 +684,10 @@ defmodule Wetware.Gel do
   end
 
   defp safe_concept_charge(name) do
-    try do
-      Wetware.Concept.charge(name)
-    catch
-      :exit, _ -> 0.0
-    end
+    Util.safe_exit(fn -> Wetware.Concept.charge(name) end, 0.0)
   end
 
   defp safe_dormant_steps(name) do
-    try do
-      Wetware.Resonance.dormancy(name).dormant_steps
-    catch
-      :exit, _ -> 0
-    end
+    Util.safe_exit(fn -> Wetware.Resonance.dormancy(name).dormant_steps end, 0)
   end
 end

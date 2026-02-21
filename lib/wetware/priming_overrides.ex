@@ -5,12 +5,14 @@ defmodule Wetware.PrimingOverrides do
 
   alias Wetware.DataPaths
 
+  @spec disabled_keys() :: [String.t()]
   def disabled_keys do
     load()
     |> Map.get("disabled", [])
     |> Enum.uniq()
   end
 
+  @spec set_enabled(String.t(), boolean()) :: :ok
   def set_enabled(key, enabled?) when is_binary(key) do
     state = load()
     disabled = Map.get(state, "disabled", [])

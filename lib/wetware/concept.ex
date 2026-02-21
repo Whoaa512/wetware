@@ -1,11 +1,12 @@
 defmodule Wetware.Concept do
+  alias Wetware.Util
   @moduledoc """
   Named concept process layered over sparse gel cells.
   """
 
   use GenServer
 
-  alias Wetware.{Cell, Gel, Params}
+  alias Wetware.{Cell, Gel, Params, Util}
 
   defstruct [:name, :cx, :cy, :r, :parent, tags: []]
 
@@ -179,12 +180,7 @@ defmodule Wetware.Concept do
 
   @impl true
   def terminate(_reason, concept) do
-    try do
-      _ = Gel.unregister_concept(concept.name)
-    catch
-      :exit, _ -> :ok
-    end
-
+    _ = Util.safe_exit(fn -> Gel.unregister_concept(concept.name) end, :ok)
     :ok
   end
 
@@ -204,11 +200,7 @@ defmodule Wetware.Concept do
   end
 
   defp safe_cell_state({x, y}) do
-    try do
-      Cell.get_state({x, y})
-    catch
-      :exit, _ -> nil
-    end
+    Util.safe_exit(fn -> Cell.get_state({x, y}) end, nil)
   end
 
   defp children_of(name) do
@@ -237,10 +229,6 @@ defmodule Wetware.Concept do
   end
 
   defp safe_info(name) do
-    try do
-      info(name)
-    catch
-      :exit, _ -> nil
-    end
+    Util.safe_exit(fn -> info(name) end, nil)
   end
 end

@@ -1,4 +1,5 @@
 defmodule Wetware.Introspect do
+  alias Wetware.Util
   @moduledoc """
   Deep self-examination of gel state.
 
@@ -7,11 +8,12 @@ defmodule Wetware.Introspect do
   and dormancy patterns that shape the felt sense.
   """
 
-  alias Wetware.{Associations, Concept, Gel, Resonance}
+  alias Wetware.{Associations, Concept, Gel, Resonance, Util}
 
   @doc """
   Full introspection report.
   """
+  @spec report() :: map()
   def report do
     concepts = Concept.list_all()
 
@@ -29,6 +31,7 @@ defmodule Wetware.Introspect do
   Top concept-to-concept associations from the semantic layer.
   These form through co-activation (imprinting together).
   """
+  @spec association_network([String.t()]) :: [map()]
   def association_network(_concepts \\ []) do
     Associations.all(0.01)
     |> Enum.map(fn {a, b, weight} -> %{from: a, to: b, weight: weight} end)
@@ -43,6 +46,7 @@ defmodule Wetware.Introspect do
   These are the hard-wired pathways — connections that have been reinforced
   enough to resist normal decay.
   """
+  @spec crystal_bonds([String.t()]) :: [map()]
   def crystal_bonds(concepts) do
     # Build a map: coord -> [concept_names] for all concept cells
     concept_cells = build_concept_cell_map(concepts)
@@ -92,6 +96,7 @@ defmodule Wetware.Introspect do
   Concepts that have clustered together through co-activation
   will show small distances.
   """
+  @spec spatial_neighbors([String.t()]) :: [map()]
   def spatial_neighbors(concepts) do
     infos =
       concepts
@@ -124,6 +129,7 @@ defmodule Wetware.Introspect do
   @doc """
   Dormancy profile: how long each concept has been inactive.
   """
+  @spec dormancy_profile([String.t()]) :: [map()]
   def dormancy_profile(concepts) do
     concepts
     |> Enum.map(fn name ->
@@ -143,6 +149,7 @@ defmodule Wetware.Introspect do
   @doc """
   Summary of gel topology.
   """
+  @spec topology_summary() :: map()
   def topology_summary do
     cells = Wetware.Gel.Index.list_cells()
     bounds = Gel.bounds()
@@ -183,6 +190,7 @@ defmodule Wetware.Introspect do
   @doc """
   Print a formatted introspection report to the terminal.
   """
+  @spec print_report(keyword()) :: :ok
   def print_report(opts \\ []) do
     r = report()
     top_n = Keyword.get(opts, :top, 10)
@@ -226,9 +234,7 @@ defmodule Wetware.Introspect do
     # Crystal bonds
     IO.puts(IO.ANSI.bright() <> "  Crystal Bonds" <> IO.ANSI.reset())
 
-    IO.puts(
-      IO.ANSI.faint() <> "  Hard-wired pathways (resist decay)" <> IO.ANSI.reset()
-    )
+    IO.puts(IO.ANSI.faint() <> "  Hard-wired pathways (resist decay)" <> IO.ANSI.reset())
 
     case Enum.take(r.crystals, top_n) do
       [] ->
@@ -281,9 +287,7 @@ defmodule Wetware.Introspect do
     |> Enum.each(fn n ->
       overlap = if n.overlapping, do: " ⚡", else: ""
 
-      IO.puts(
-        "  #{n.a} ↔ #{n.b}  dist=#{n.center_distance} edge=#{n.edge_distance}#{overlap}"
-      )
+      IO.puts("  #{n.a} ↔ #{n.b}  dist=#{n.center_distance} edge=#{n.edge_distance}#{overlap}")
     end)
 
     IO.puts("")
@@ -318,6 +322,7 @@ defmodule Wetware.Introspect do
   Shows how reinforced each concept's internal structure is —
   concepts with more crystal bonds have been activated more consistently.
   """
+  @spec concept_crystallization([String.t()]) :: [map()]
   def concept_crystallization(concepts) do
     concepts
     |> Enum.map(fn name ->
@@ -368,51 +373,27 @@ defmodule Wetware.Introspect do
   end
 
   defp safe_concept_cells(name) do
-    try do
-      Gel.concept_cells(name)
-    catch
-      :exit, _ -> []
-    end
+    Util.safe_exit(fn -> Gel.concept_cells(name) end, [])
   end
 
   defp safe_cell_state({x, y}) when is_integer(x) and is_integer(y) do
-    try do
-      Wetware.Cell.get_state({x, y})
-    catch
-      :exit, _ -> nil
-    end
+    Util.safe_exit(fn -> Wetware.Cell.get_state({x, y}) end, nil)
   end
 
   defp safe_cell_state(pid) when is_pid(pid) do
-    try do
-      Wetware.Cell.get_state(pid)
-    catch
-      :exit, _ -> nil
-    end
+    Util.safe_exit(fn -> Wetware.Cell.get_state(pid) end, nil)
   end
 
   defp safe_concept_info(name) do
-    try do
-      Concept.info(name)
-    catch
-      :exit, _ -> nil
-    end
+    Util.safe_exit(fn -> Concept.info(name) end, nil)
   end
 
   defp safe_dormancy(name) do
-    try do
-      Resonance.dormancy(name)
-    catch
-      :exit, _ -> %{dormant_steps: 0, last_active_step: 0}
-    end
+    Util.safe_exit(fn -> Resonance.dormancy(name) end, %{dormant_steps: 0, last_active_step: 0})
   end
 
   defp safe_charge(name) do
-    try do
-      Concept.charge(name)
-    catch
-      :exit, _ -> 0.0
-    end
+    Util.safe_exit(fn -> Concept.charge(name) end, 0.0)
   end
 
   defp pair_key(a, b) when a <= b, do: {a, b}

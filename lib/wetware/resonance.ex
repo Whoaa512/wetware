@@ -1,7 +1,17 @@
 defmodule Wetware.Resonance do
+  alias Wetware.Util
   @moduledoc "Main API for imprinting, dreaming, briefing, and persistence."
 
-  alias Wetware.{Concept, DataPaths, EmotionalBias, Gel, Persistence, Priming, PrimingOverrides}
+  alias Wetware.{
+    Concept,
+    DataPaths,
+    EmotionalBias,
+    Gel,
+    Persistence,
+    Priming,
+    PrimingOverrides,
+    Util
+  }
 
   @dormancy_table :wetware_dormancy
 
@@ -76,11 +86,12 @@ defmodule Wetware.Resonance do
   def imprint(concept_names, opts \\ []) do
     steps = Keyword.get(opts, :steps, 5)
     strength = Keyword.get(opts, :strength, 1.0)
-    valence = clamp(Keyword.get(opts, :valence, 0.0), -1.0, 1.0)
+    valence = Util.clamp(Keyword.get(opts, :valence, 0.0), -1.0, 1.0)
+    multipliers = EmotionalBias.strength_multipliers(concept_names)
     Wetware.Associations.co_activate(concept_names)
 
     Enum.each(concept_names, fn name ->
-      effective_strength = strength * EmotionalBias.strength_multiplier(name)
+      effective_strength = strength * Map.get(multipliers, name, 1.0)
       Concept.stimulate(name, effective_strength, valence: valence)
     end)
 
@@ -246,12 +257,7 @@ defmodule Wetware.Resonance do
 
     Concept.list_all()
     |> Enum.each(fn name ->
-      charge =
-        try do
-          Concept.charge(name)
-        catch
-          :exit, _ -> 0.0
-        end
+      charge = Util.safe_exit(fn -> Concept.charge(name) end, 0.0)
 
       if charge > threshold,
         do: :ets.insert(@dormancy_table, {name, step_count}),
@@ -325,8 +331,6 @@ defmodule Wetware.Resonance do
       _ -> :ok
     end
   end
-
-  defp clamp(v, lo, hi), do: max(lo, min(hi, v))
 
   defp ensure_name_available(name) do
     if name in Concept.list_all(), do: {:error, :already_exists}, else: :ok

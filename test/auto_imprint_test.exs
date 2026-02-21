@@ -50,6 +50,16 @@ defmodule Wetware.AutoImprintTest do
     assert medium < deep
   end
 
+  test "infer_valence/1 reflects positive and negative language balance" do
+    positive = AutoImprint.infer_valence("clear progress and breakthrough momentum")
+    negative = AutoImprint.infer_valence("conflict tension blocked and overwhelmed")
+    neutral = AutoImprint.infer_valence("just factual status update with no signal terms")
+
+    assert positive > 0.0
+    assert negative < 0.0
+    assert neutral == 0.0
+  end
+
   defp tmp_path(label) do
     Path.join(
       System.tmp_dir!(),

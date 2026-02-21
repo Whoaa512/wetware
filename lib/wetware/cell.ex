@@ -1,11 +1,12 @@
 defmodule Wetware.Cell do
+  alias Wetware.Util
   @moduledoc """
   A single sparse cell in the gel substrate.
   """
 
   use GenServer
 
-  alias Wetware.Params
+  alias Wetware.{Params, Util}
 
   defstruct [
     :x,
@@ -189,7 +190,7 @@ defmodule Wetware.Cell do
 
     kind = Keyword.get(attrs, :kind, state.kind)
     owners = Keyword.get(attrs, :owners, state.owners)
-    valence = clamp(Keyword.get(attrs, :valence, state.valence), -1.0, 1.0)
+    valence = Util.clamp(Keyword.get(attrs, :valence, state.valence), -1.0, 1.0)
     last_step = Keyword.get(attrs, :last_step, state.last_step)
     last_active_step = Keyword.get(attrs, :last_active_step, state.last_active_step)
 
@@ -228,8 +229,8 @@ defmodule Wetware.Cell do
         acc + flow
       end)
 
-    new_charge = clamp(state.charge + propagated_charge, 0.0, 1.0)
-    new_valence = clamp(state.valence + propagated_valence, -1.0, 1.0)
+    new_charge = Util.clamp(state.charge + propagated_charge, 0.0, 1.0)
+    new_valence = Util.clamp(state.valence + propagated_valence, -1.0, 1.0)
     am_active = new_charge > p.activation_threshold
 
     neighbors =
@@ -258,8 +259,8 @@ defmodule Wetware.Cell do
       end)
 
     charge_decay = min(p.charge_decay * profile.charge_decay_mult, 0.95)
-    decayed_charge = clamp(new_charge * (1.0 - charge_decay), 0.0, 1.0)
-    decayed_valence = clamp(new_valence * (1.0 - min(p.valence_decay, 0.95)), -1.0, 1.0)
+    decayed_charge = Util.clamp(new_charge * (1.0 - charge_decay), 0.0, 1.0)
+    decayed_valence = Util.clamp(new_valence * (1.0 - min(p.valence_decay, 0.95)), -1.0, 1.0)
 
     last_active_step =
       if decayed_charge > p.activation_threshold do
@@ -296,8 +297,8 @@ defmodule Wetware.Cell do
   end
 
   defp stimulate_state(state, amount, valence) do
-    new_charge = clamp(state.charge + amount, 0.0, 1.0)
-    new_valence = clamp(state.valence + valence * amount, -1.0, 1.0)
+    new_charge = Util.clamp(state.charge + amount, 0.0, 1.0)
+    new_valence = Util.clamp(state.valence + valence * amount, -1.0, 1.0)
 
     if new_charge > state.params.activation_threshold do
       %{
@@ -310,6 +311,4 @@ defmodule Wetware.Cell do
       %{state | charge: new_charge, valence: new_valence}
     end
   end
-
-  defp clamp(v, lo, hi), do: max(lo, min(hi, v))
 end

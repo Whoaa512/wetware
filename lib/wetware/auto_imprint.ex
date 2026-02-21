@@ -1,14 +1,20 @@
 defmodule Wetware.AutoImprint do
+  alias Wetware.Util
   @moduledoc """
   Heuristic auto-imprint pipeline for conversation summaries/transcripts.
 
   Extracts known concepts + valence and imprints with depth/duration weighting.
   """
 
-  alias Wetware.{Concept, Gel}
+  alias Wetware.{Concept, Gel, Util}
 
   @negative_terms ~w(conflict tension hard overwhelmed blocked anxious frustrated upset drained stress)
   @positive_terms ~w(breakthrough progress clear resolved grateful calm trust aligned excited momentum)
+  @precompiled_phrase_regexes (@negative_terms ++ @positive_terms)
+                              |> Enum.uniq()
+                              |> Map.new(fn term ->
+                                {term, Regex.compile!("\\b#{Regex.escape(term)}\\b", "u")}
+                              end)
 
   @type result :: %{
           matched_concepts: [{String.t(), integer(), float()}],
@@ -19,6 +25,7 @@ defmodule Wetware.AutoImprint do
           duration_minutes: pos_integer()
         }
 
+  @spec run(String.t(), keyword()) :: {:ok, result()} | {:error, :no_concepts_matched}
   def run(text, opts \\ []) when is_binary(text) do
     depth = clamp_int(Keyword.get(opts, :depth, 3), 1, 10)
     duration_minutes = clamp_int(Keyword.get(opts, :duration_minutes, 25), 1, 24 * 60)
@@ -34,7 +41,7 @@ defmodule Wetware.AutoImprint do
       matched_concepts =
         matches
         |> Enum.map(fn {name, count} ->
-          weighted_strength = clamp(mention_strength(count) * weight, 0.05, 1.0)
+          weighted_strength = Util.clamp(mention_strength(count) * weight, 0.05, 1.0)
           Concept.stimulate(name, weighted_strength, valence: valence)
           {name, count, Float.round(weighted_strength, 4)}
         end)
@@ -53,12 +60,14 @@ defmodule Wetware.AutoImprint do
     end
   end
 
+  @spec depth_duration_weight(number(), number()) :: float()
   def depth_duration_weight(depth, duration_minutes) do
     depth_component = (depth - 1) / 9
     duration_component = :math.log(1 + duration_minutes) / :math.log(1 + 120)
-    clamp(0.35 + depth_component * 0.45 + duration_component * 0.45, 0.25, 2.0)
+    Util.clamp(0.35 + depth_component * 0.45 + duration_component * 0.45, 0.25, 2.0)
   end
 
+  @spec infer_valence(String.t()) :: float()
   def infer_valence(text) do
     normalized = text |> String.downcase() |> String.replace(~r/[^a-z0-9\-\s]/u, " ")
 
@@ -69,10 +78,11 @@ defmodule Wetware.AutoImprint do
     if total == 0 do
       0.0
     else
-      clamp((pos - neg) / total, -1.0, 1.0)
+      Util.clamp((pos - neg) / total, -1.0, 1.0)
     end
   end
 
+  @spec extract_known_concepts(String.t()) :: [{String.t(), integer()}]
   def extract_known_concepts(text) do
     lowered = String.downcase(text)
 
@@ -90,11 +100,22 @@ defmodule Wetware.AutoImprint do
   defp count_phrase(_text, phrase) when not is_binary(phrase) or phrase == "", do: 0
 
   defp count_phrase(text, phrase) do
-    escaped = Regex.escape(String.downcase(phrase))
+    lowered_phrase = String.downcase(phrase)
 
-    case Regex.compile("\\b#{escaped}\\b", "u") do
-      {:ok, regex} -> Regex.scan(regex, text) |> length()
-      {:error, _} -> 0
+    regex =
+      Map.get_lazy(@precompiled_phrase_regexes, lowered_phrase, fn ->
+        escaped = Regex.escape(lowered_phrase)
+
+        case Regex.compile("\\b#{escaped}\\b", "u") do
+          {:ok, compiled} -> compiled
+          {:error, _} -> nil
+        end
+      end)
+
+    if regex do
+      Regex.scan(regex, text) |> length()
+    else
+      0
     end
   end
 
@@ -111,6 +132,4 @@ defmodule Wetware.AutoImprint do
 
   defp clamp_int(value, lo, hi) when is_integer(value), do: max(lo, min(hi, value))
   defp clamp_int(_, lo, _hi), do: lo
-
-  defp clamp(v, lo, hi), do: max(lo, min(hi, v))
 end

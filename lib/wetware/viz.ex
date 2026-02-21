@@ -1,21 +1,30 @@
 defmodule Wetware.Viz do
+  alias Wetware.Util
   @moduledoc """
   Lightweight local HTTP server for live gel visualization.
 
   Uses plain TCP + HTTP/1.1 and polling (`/api/state`) to avoid external deps.
   """
 
-  alias Wetware.{Cell, Gel}
+  alias Wetware.{Cell, Gel, Util}
 
   @default_port 4157
   @max_cells 6_000
 
+  @spec default_port() :: pos_integer()
   def default_port, do: @default_port
 
+  @spec serve(keyword()) :: :ok | {:error, term()}
   def serve(opts \\ []) do
     port = Keyword.get(opts, :port, @default_port)
 
-    case :gen_tcp.listen(port, [:binary, packet: :raw, active: false, reuseaddr: true]) do
+    case :gen_tcp.listen(port, [
+           :binary,
+           packet: :raw,
+           active: false,
+           reuseaddr: true,
+           ip: {127, 0, 0, 1}
+         ]) do
       {:ok, listener} ->
         IO.puts("Wetware viz listening on http://127.0.0.1:#{port}")
         accept_loop(listener)
@@ -25,6 +34,7 @@ defmodule Wetware.Viz do
     end
   end
 
+  @spec state_snapshot() :: map()
   def state_snapshot do
     cells =
       Wetware.Gel.Index.list_cells()
@@ -59,6 +69,7 @@ defmodule Wetware.Viz do
     }
   end
 
+  @spec state_json() :: String.t()
   def state_json do
     state_snapshot()
     |> Jason.encode!()
@@ -147,11 +158,7 @@ defmodule Wetware.Viz do
   end
 
   defp safe_cell_state(pid) do
-    try do
-      Cell.get_state(pid)
-    catch
-      :exit, _ -> %{}
-    end
+    Util.safe_exit(fn -> Cell.get_state(pid) end, %{})
   end
 
   defp html do

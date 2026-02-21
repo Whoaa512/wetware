@@ -1,4 +1,5 @@
 defmodule Wetware.Gel.Lifecycle do
+  alias Wetware.Util
   @moduledoc """
   Periodic sparse-cell lifecycle sweeps.
 
@@ -7,7 +8,7 @@ defmodule Wetware.Gel.Lifecycle do
 
   use GenServer
 
-  alias Wetware.{Cell, Gel}
+  alias Wetware.{Cell, Gel, Util}
 
   @sweep_interval_ms 5_000
 
@@ -40,7 +41,7 @@ defmodule Wetware.Gel.Lifecycle do
 
     Wetware.Gel.Index.list_cells()
     |> Enum.each(fn {{x, y}, pid} ->
-      case Cell.get_state(pid) do
+      case Util.safe_exit(fn -> Cell.get_state(pid) end, nil) do
         %{kind: :concept} ->
           :ok
 
@@ -65,9 +66,9 @@ defmodule Wetware.Gel.Lifecycle do
               last_active_step: last_active
             }
 
-            :ok = Wetware.Gel.Index.put_snapshot({x, y}, snapshot)
-            Process.exit(pid, :normal)
-            Wetware.Gel.Index.delete_cell({x, y})
+            _ = Util.safe_exit(fn -> Wetware.Gel.Index.put_snapshot({x, y}, snapshot) end, :ok)
+            _ = Util.safe_exit(fn -> Process.exit(pid, :normal) end, :ok)
+            _ = Util.safe_exit(fn -> Wetware.Gel.Index.delete_cell({x, y}) end, :ok)
           end
 
         _ ->

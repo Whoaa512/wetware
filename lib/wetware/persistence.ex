@@ -1,7 +1,8 @@
 defmodule Wetware.Persistence do
+  alias Wetware.Util
   @moduledoc "Save/load sparse gel state to JSON (elixir-v3-sparse)."
 
-  alias Wetware.{Cell, DataPaths, Gel, Params}
+  alias Wetware.{Cell, DataPaths, Gel, Params, Util}
 
   @default_path DataPaths.gel_state_path()
   # Cells below this charge threshold are restored as snapshots, not live processes.
@@ -267,18 +268,16 @@ defmodule Wetware.Persistence do
   defp parse_kind(_), do: :interstitial
 
   defp safe_concept_charge(name) do
-    try do
-      Wetware.Concept.charge(name)
-    catch
-      :exit, _ -> 0.0
-    end
+    Util.safe_exit(fn -> Wetware.Concept.charge(name) end, 0.0)
   end
 
   defp safe_concept_info(name) do
-    try do
-      Wetware.Concept.info(name)
-    catch
-      :exit, _ -> %{cx: nil, cy: nil, r: 3, tags: [], parent: nil}
-    end
+    Util.safe_exit(fn -> Wetware.Concept.info(name) end, %{
+      cx: nil,
+      cy: nil,
+      r: 3,
+      tags: [],
+      parent: nil
+    })
   end
 end

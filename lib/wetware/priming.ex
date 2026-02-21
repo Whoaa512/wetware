@@ -1,4 +1,5 @@
 defmodule Wetware.Priming do
+  alias Wetware.Util
   @moduledoc """
   Disposition hint generation from current concept activation.
   """
@@ -10,6 +11,7 @@ defmodule Wetware.Priming do
   @doc """
   Returns transparent, structured disposition hints.
   """
+  @spec hints([{String.t(), map()}]) :: [map()]
   def hints(concept_states) when is_list(concept_states) do
     by_name = Map.new(concept_states, fn {name, data} -> {name, data} end)
 
@@ -23,6 +25,7 @@ defmodule Wetware.Priming do
   @doc """
   Render compact priming tokens from a briefing payload.
   """
+  @spec tokens_from_briefing(map()) :: [String.t()]
   def tokens_from_briefing(%{disposition_hints: hints}) when is_list(hints) do
     Enum.map(hints, fn hint ->
       id = Map.get(hint, :id) || Map.get(hint, "id") || "hint"
@@ -37,6 +40,7 @@ defmodule Wetware.Priming do
   @doc """
   Render a transparent prompt block suitable for system prompt injection.
   """
+  @spec prompt_block(map()) :: String.t()
   def prompt_block(%{disposition_hints: hints} = briefing) do
     tokens = tokens_from_briefing(briefing)
 
@@ -67,7 +71,7 @@ defmodule Wetware.Priming do
     conflict = strongest_by_tags(by_name, @conflict_tags)
 
     if kindness && conflict do
-      confidence = clamp((kindness.charge + conflict.charge) / 2, 0.0, 1.0)
+      confidence = Util.clamp((kindness.charge + conflict.charge) / 2, 0.0, 1.0)
 
       %{
         id: "lean_gentle",
@@ -89,7 +93,7 @@ defmodule Wetware.Priming do
     overload = strongest_by_tags(by_name, @overload_tags)
 
     if overload do
-      confidence = clamp(overload.charge, 0.0, 1.0)
+      confidence = Util.clamp(overload.charge, 0.0, 1.0)
 
       %{
         id: "be_concise",
@@ -116,6 +120,5 @@ defmodule Wetware.Priming do
     |> Enum.reject(&is_nil/1)
     |> Enum.max_by(& &1.charge, fn -> nil end)
   end
-
-  defp clamp(v, lo, hi), do: max(lo, min(hi, v))
 end
+

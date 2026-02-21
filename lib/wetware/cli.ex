@@ -1,7 +1,16 @@
 defmodule Wetware.CLI do
   @moduledoc "CLI entrypoint for the wetware binary."
 
-  alias Wetware.{AutoImprint, DataPaths, Discovery, Introspect, PrimingOverrides, Pruning, Resonance, Viz}
+  alias Wetware.{
+    AutoImprint,
+    DataPaths,
+    Discovery,
+    Introspect,
+    PrimingOverrides,
+    Pruning,
+    Resonance,
+    Viz
+  }
 
   def main(argv) do
     Application.ensure_all_started(:wetware)
