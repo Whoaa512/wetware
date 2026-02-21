@@ -1,7 +1,7 @@
 defmodule Wetware.Pruning do
   @moduledoc "Concept pruning for dormant concepts that have not earned persistence."
 
-  alias Wetware.{Cell, Concept, DataPaths, Resonance}
+  alias Wetware.{Cell, Concept, DataPaths, Resonance, Util}
 
   @default_dormancy_steps 500
 
@@ -64,11 +64,26 @@ defmodule Wetware.Pruning do
   defp crystallized_concept?(name) do
     Wetware.Gel.concept_cells(name)
     |> Enum.any?(fn {x, y} ->
-      state = Cell.get_state({x, y})
+      state = get_cell_state(x, y)
 
-      state.neighbors
-      |> Enum.any?(fn {_offset, data} -> Map.get(data, :crystallized, false) end)
+      case state do
+        nil -> false
+        _ ->
+          state.neighbors
+          |> Enum.any?(fn {_offset, data} -> Map.get(data, :crystallized, false) end)
+      end
     end)
+  end
+
+  defp get_cell_state(x, y) do
+    case Wetware.Gel.Index.cell_pid({x, y}) do
+      {:ok, pid} -> Util.safe_exit(fn -> Cell.get_state(pid) end, nil)
+      :error ->
+        case Wetware.Gel.Index.snapshot({x, y}) do
+          {:ok, snapshot} -> snapshot
+          :error -> nil
+        end
+    end
   end
 
   defp load_history do

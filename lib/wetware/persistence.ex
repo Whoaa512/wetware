@@ -130,6 +130,12 @@ defmodule Wetware.Persistence do
   end
 
   defp restore_sparse_state(state) do
+    do_restore_sparse_state(state)
+  catch
+    :exit, _ -> :ok
+  end
+
+  defp do_restore_sparse_state(state) do
     p = Gel.params() || Params.default()
     step_count = state["step_count"] || 0
     concepts = parse_concepts(state["concepts"] || %{})
