@@ -17,6 +17,10 @@ It works for agents (plug it into any framework via CLI) and for humans (run it 
 
 > *"Holding for memories. Shifting for thoughts."* — Ex Machina
 
+<p align="center">
+  <img src="demo.gif" alt="wetware briefing — see what's resonating" width="700" />
+</p>
+
 ---
 
 ## How It Works
