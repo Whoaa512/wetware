@@ -17,10 +17,10 @@ Working: imprint, briefing, dream, replay, persistence, associations.
 - [x] Add example concepts.json
 - [x] Rename to "Wetware" (drop "Digital")
 - [x] Write "Why Wetware?" + Origin sections for README
-- [ ] **Tests** — smoke tests covering full lifecycle (boot → imprint → briefing → dream → save/load)
-- [ ] **`wetware init` command** — scaffold ~/.config/wetware/ with example concepts on first run
+- [x] **Tests** — 60 tests covering cells, propagation, Hebbian learning, crystallization, persistence, associations, priming, lifecycle, init, discovery, pruning, auto-imprint, emotional layer
+- [x] **`wetware init` command** — scaffold ~/.config/wetware/ with empty concepts.json (add via `wetware discover`)
 - [ ] **OpenClaw integration example** — skill config + heartbeat setup showing real-world agent usage
-- [x] **Browser visualization** — live gel viz with association network, concept charges, interactive highlights
+- [x] **Browser visualization** — live gel viz (cell view + constellation view) with association network, crystal bonds, concept charges, interactive highlights, force-directed layout
 - [ ] **Demo GIF/video** — imprint → watch propagation → briefing for the README
 - [ ] GitHub repo setup (public)
 
