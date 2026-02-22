@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux_x86_64
+            asset: wetware-linux-x86_64
+          - os: ubuntu-24.04-arm
+            target: linux_aarch64
+            asset: wetware-linux-aarch64
+          - os: macos-13
+            target: darwin_x86_64
+            asset: wetware-darwin-x86_64
+          - os: macos-14
+            target: darwin_aarch64
+            asset: wetware-darwin-aarch64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Elixir and OTP
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.17.3"
+          otp-version: "27.1"
+
+      - name: Install dependencies
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          MIX_ENV=prod mix deps.get
+
+      - name: Build release
+        env:
+          MIX_ENV: prod
+          BURRITO_TARGET: ${{ matrix.target }}
+        run: |
+          MIX_ENV=prod mix release
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p dist
+          cp burrito_out/* dist/${{ matrix.asset }} 2>/dev/null || \
+          cp _build/prod/rel/wetware/bin/wetware dist/${{ matrix.asset }}
+          chmod +x dist/${{ matrix.asset }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*

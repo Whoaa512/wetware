@@ -56,7 +56,31 @@ The substrate doesn't *simulate* propagation — it **is** the substrate. Each c
 
 ## Installation
 
-### Quick Install
+### Download (recommended)
+
+Grab a prebuilt binary from [Releases](https://github.com/Whoaa512/wetware/releases):
+
+```bash
+# macOS Apple Silicon
+curl -L https://github.com/Whoaa512/wetware/releases/latest/download/wetware-darwin-aarch64 -o wetware
+
+# macOS Intel
+curl -L https://github.com/Whoaa512/wetware/releases/latest/download/wetware-darwin-x86_64 -o wetware
+
+# Linux x86_64
+curl -L https://github.com/Whoaa512/wetware/releases/latest/download/wetware-linux-x86_64 -o wetware
+
+# Linux ARM
+curl -L https://github.com/Whoaa512/wetware/releases/latest/download/wetware-linux-aarch64 -o wetware
+
+chmod +x wetware
+mv wetware ~/.local/bin/   # or anywhere on your PATH
+wetware init
+```
+
+No Erlang or Elixir required — the binary is self-contained.
+
+### Build from source
 
 ```bash
 git clone https://github.com/Whoaa512/wetware.git
@@ -64,7 +88,7 @@ cd wetware
 ./install.sh
 ```
 
-This installs Erlang + Elixir (via asdf) if needed, builds the escript, copies it to `~/.local/bin/wetware`, and runs `wetware init` to scaffold your config.
+This installs Erlang + Elixir (via asdf/brew) if needed, builds the escript, copies it to `~/.local/bin/wetware`, and runs `wetware init`.
 
 ### Manual Install
 
