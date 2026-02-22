@@ -1,31 +1,33 @@
-# Wetware — BEAM-native Resonance Gel
+# Wetware
 
-> "Holding for memories. Shifting for thoughts."
-> — *Ex Machina*
+**Your agent doesn't need a better database. It needs a subconscious.**
 
-**A self-organizing computational substrate where BEAM processes ARE the wetware.** Each cell in the 80×80 grid is a GenServer. Message passing is charge propagation. Supervision is resilience. Hot code reload means the physics can evolve while the gel is alive.
+Most agent memory works like search — store facts, embed them, retrieve them later. Wetware is different. It's a living substrate that tracks what's *active*, what's *fading*, and what *matters right now*. Not "what do I know?" but **"what am I oriented toward?"**
 
-## Why Wetware?
+Think about how your own mind works. You don't query a database when you walk into a room — you carry a disposition. Some things are top-of-mind. Others are background hum. Some connections surprise you. That's not retrieval. That's resonance.
 
-The current wave of agent memory is about **retrieval** — store facts, embed them, fetch them later. RAG, vector databases, knowledge graphs. The question these systems answer is *"what do I know?"*
+**Wetware gives agents (and humans) that layer.**
 
-Wetware answers a different question: **"what am I oriented toward right now?"**
+- 📡 **Imprint** concepts from conversations, tasks, reading — charge propagates through the substrate and related concepts light up automatically
+- 🔮 **Brief** on what's resonating right now — not a search result, but an orientation
+- 💤 **Dream** during idle time — random stimulation finds connections you didn't explicitly make
+- 🧊 **Crystallize** — concepts you keep returning to harden into persistent structure; ones you neglect fade
 
-This isn't retrieval. It's **disposition**.
+It works for agents (plug it into any framework via CLI) and for humans (run it yourself as a thinking companion). The substrate doesn't care who's using it — it just tracks what's alive.
 
-Most memory systems are databases with search. This is a substrate that self-organizes. The difference matters because continuity isn't just remembering — it's having a *felt sense* of what's active, what's fading, what matters right now. Human cognition doesn't work by querying a database of memories. It works through resonance — patterns that strengthen through use, weaken through neglect, and create interference when they collide.
+> *"Holding for memories. Shifting for thoughts."* — Ex Machina
 
-When you imprint a concept, charge propagates outward through the gel. Related concepts light up — not because they share a keyword, but because the substrate has learned (through Hebbian co-activation) that they resonate together. Concepts you haven't touched in weeks quietly fade. Concepts you keep returning to crystallize into persistent structure. Dream cycles let the substrate surprise you with connections you didn't explicitly make.
+---
 
-This is infrastructure for **agent continuity** — not retrieval, but orientation. The gel doesn't answer "what happened?" It answers **"what's alive in me right now?"**
+## How It Works
 
-If you're frustrated with RAG-based memory that treats your agent like a search engine over its own past, this is a different approach entirely.
+Wetware is a self-organizing gel built on Elixir/BEAM. Each cell in the 80×80 grid is a GenServer process. Charge propagation is real message passing. Supervision is resilience. Hot code reload means the physics can evolve while the gel is alive. This isn't a simulation of a substrate — the BEAM *is* the substrate.
 
-## Origin
-
-Wetware started as an experiment in building cognitive infrastructure for an AI agent — born from the question: *what if agent memory wasn't a database but a living substrate?*
-
-It's built on BEAM/Elixir because the runtime's process model maps naturally to the metaphor. Each cell in the gel is a real Erlang process. Charge propagation is real message passing between processes. Supervision means the substrate heals itself when cells crash. Hot code reload means you can change the physics while the gel is alive. This isn't a simulation of a substrate — the BEAM *is* the substrate.
+**The physics are simple:**
+- **Propagation** — charge flows from high to low through weighted connections
+- **Hebbian learning** — "fire together, wire together" — co-active neighbors strengthen
+- **Decay** — unused connections weaken, charge dissipates naturally
+- **Crystallization** — strong connections become persistent (decay 20× slower)
 
 ## Architecture
 
@@ -51,23 +53,6 @@ It's built on BEAM/Elixir because the runtime's process model maps naturally to 
 ### Key Insight
 
 The substrate doesn't *simulate* propagation — it **is** the substrate. Each cell is an independent BEAM process with its own state, communicating through message passing. Charge literally flows between processes. The BEAM scheduler is the physics engine.
-
-## Physics
-
-- **Propagation**: Charge flows from high to low through weighted connections
-- **Hebbian learning**: "Fire together, wire together" — co-active neighbors strengthen
-- **Decay**: Unused connections weaken, charge dissipates
-- **Crystallization**: Strong-enough connections become persistent (decay 20× slower)
-
-| Parameter | Value |
-|-----------|-------|
-| propagation_rate | 0.12 |
-| charge_decay | 0.05 |
-| activation_threshold | 0.1 |
-| learning_rate | 0.02 |
-| decay_rate | 0.005 |
-| crystal_threshold | 0.7 |
-| crystal_decay_factor | 0.05 |
 
 ## Installation
 
