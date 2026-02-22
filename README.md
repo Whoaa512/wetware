@@ -18,7 +18,7 @@ It works for agents (plug it into any framework via CLI) and for humans (run it 
 > *"Holding for memories. Shifting for thoughts."* — Ex Machina
 
 <p align="center">
-  <img src="demo.gif" alt="wetware briefing — see what's resonating" width="700" />
+  <img src="demo-briefing.png" alt="wetware in action — status, imprint, and briefing" width="700" />
 </p>
 
 ---
@@ -57,6 +57,10 @@ Wetware is a self-organizing gel built on Elixir/BEAM. Each cell in the 80×80 g
 ### Key Insight
 
 The substrate doesn't *simulate* propagation — it **is** the substrate. Each cell is an independent BEAM process with its own state, communicating through message passing. Charge literally flows between processes. The BEAM scheduler is the physics engine.
+
+<p align="center">
+  <img src="demo-introspect.png" alt="wetware introspect — crystal bonds, associations, and topology" width="720" />
+</p>
 
 ## Installation
 
