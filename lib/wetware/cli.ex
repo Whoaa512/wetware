@@ -13,6 +13,10 @@ defmodule Wetware.CLI do
   }
 
   def main(argv) do
+    # Enable unicode output for the escript
+    :io.setopts(:standard_io, encoding: :unicode)
+    :io.setopts(:standard_error, encoding: :unicode)
+
     Application.ensure_all_started(:wetware)
 
     # Handle init before full boot — it scaffolds the data dir
