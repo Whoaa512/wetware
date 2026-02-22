@@ -1,3 +1,10 @@
+// Add this to your ~/.openclaw/openclaw.json5 to enable the wetware skill.
+//
+// 1. Copy the skill folder into your workspace:
+//    cp -R example/openclaw/skills/wetware-memory <your-workspace>/skills/
+//
+// 2. Merge this config into your openclaw.json5:
+
 {
   skills: {
     entries: {
@@ -5,10 +12,6 @@
         enabled: true,
         env: {
           WETWARE_DATA_DIR: "~/.config/wetware",
-        },
-        config: {
-          heartbeatMode: "next-heartbeat",
-          heartbeatTag: "wetware",
         },
       },
     },

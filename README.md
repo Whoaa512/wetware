@@ -56,27 +56,34 @@ The substrate doesn't *simulate* propagation — it **is** the substrate. Each c
 
 ## Installation
 
-### Prerequisites
-
-- Erlang/OTP 26+
-- Elixir 1.16+
-
-### Build
+### Quick Install
 
 ```bash
-git clone https://github.com/yourusername/wetware.git
+git clone https://github.com/Whoaa512/wetware.git
+cd wetware
+./install.sh
+```
+
+This installs Erlang + Elixir (via asdf) if needed, builds the escript, copies it to `~/.local/bin/wetware`, and runs `wetware init` to scaffold your config.
+
+### Manual Install
+
+**Prerequisites:** Erlang/OTP 26+ and Elixir 1.16+
+
+```bash
+git clone https://github.com/Whoaa512/wetware.git
 cd wetware
 mix deps.get
 mix escript.build
+cp wetware ~/.local/bin/   # or anywhere on your PATH
+wetware init               # creates ~/.config/wetware/ with starter concepts
 ```
 
-This produces a `wetware` escript binary you can put on your PATH.
-
-### As a dependency
+### As an Elixir dependency
 
 ```elixir
 # mix.exs
-{:wetware, github: "yourusername/wetware"}
+{:wetware, github: "Whoaa512/wetware"}
 ```
 
 ## Quick Start
@@ -193,54 +200,27 @@ wetware imprint "$DISCUSSED_TOPICS" --steps 5
 |----------|---------|-------------|
 | `WETWARE_DATA_DIR` | `~/.config/wetware` | Path to data directory (concepts.json, gel state) |
 
-### OpenClaw integration example
+### OpenClaw
 
-This repo includes a practical OpenClaw setup under `example/openclaw/`:
-
-- Skill: `example/openclaw/skills/wetware-memory/SKILL.md`
-- Config snippet: `example/openclaw/openclaw.example.json5`
-- Heartbeat helper: `scripts/openclaw_wetware_heartbeat.sh`
-
-#### 1) Install the skill in your OpenClaw workspace
+Wetware ships with a ready-made [OpenClaw](https://openclaw.ai) skill. Copy it into your workspace and enable it:
 
 ```bash
-mkdir -p <openclaw-workspace>/skills
-cp -R example/openclaw/skills/wetware-memory <openclaw-workspace>/skills/
+cp -R example/openclaw/skills/wetware-memory <your-workspace>/skills/
 ```
 
-#### 2) Enable the skill in `~/.openclaw/openclaw.json`
-
-Merge this shape (see `example/openclaw/openclaw.example.json5`):
+Add to your `openclaw.json5`:
 
 ```json5
 {
   skills: {
     entries: {
-      "wetware-memory": {
-        enabled: true,
-        env: {
-          WETWARE_DATA_DIR: "~/.config/wetware"
-        }
-      }
+      "wetware-memory": { enabled: true }
     }
   }
 }
 ```
 
-#### 3) Enable heartbeats + send wetware updates
-
-```bash
-openclaw system heartbeat enable
-./scripts/openclaw_wetware_heartbeat.sh
-```
-
-The script packages `wetware briefing` output into a system event and schedules it for the next heartbeat cycle.
-
-#### 4) Optional: immediate wake-up event after major tasks
-
-```bash
-openclaw system event --mode now --text "Wetware: completed task, imprinting key concepts now."
-```
+Your agent will now have access to the full wetware loop — briefing, imprint, dream — as part of its skill set. See [`example/openclaw/`](example/openclaw/) for details.
 
 ### Data Directory Structure
 

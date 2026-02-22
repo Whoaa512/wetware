@@ -19,7 +19,7 @@ Working: imprint, briefing, dream, replay, persistence, associations.
 - [x] Write "Why Wetware?" + Origin sections for README
 - [x] **Tests** — 60 tests covering cells, propagation, Hebbian learning, crystallization, persistence, associations, priming, lifecycle, init, discovery, pruning, auto-imprint, emotional layer
 - [x] **`wetware init` command** — scaffold ~/.config/wetware/ with empty concepts.json (add via `wetware discover`)
-- [ ] **OpenClaw integration example** — skill config + heartbeat setup showing real-world agent usage
+- [x] **OpenClaw integration example** — skill config + heartbeat setup showing real-world agent usage
 - [x] **Browser visualization** — live gel viz (cell view + constellation view) with association network, crystal bonds, concept charges, interactive highlights, force-directed layout
 - [ ] **Demo GIF/video** — imprint → watch propagation → briefing for the README
 - [ ] GitHub repo setup (public)
