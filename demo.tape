@@ -1,45 +1,40 @@
 # Wetware Demo — Real production system after 12K+ steps
-# Shows: status → imprint → briefing → introspect
+# Shows: status → briefing → introspect
 
 Output demo.gif
 
 Require wetware
 
 Set Shell "zsh"
-Set FontSize 16
+Set FontSize 15
 Set Width 1000
-Set Height 650
+Set Height 700
 Set Padding 20
 Set Theme "Catppuccin Mocha"
 Set WindowBar Colorful
-Set TypingSpeed 40ms
-Set PlaybackSpeed 1.5
+Set TypingSpeed 35ms
+Set PlaybackSpeed 2
 
 # Scene 1: Status overview
-Sleep 500ms
+Sleep 1s
 Type "wetware status"
 Enter
-Sleep 4s
+Sleep 8s
 
 # Scene 2: Imprint some concepts
 Type "wetware imprint 'curiosity, emergence, play'"
 Enter
-Sleep 4s
-
-# Scene 3: Quick dream cycle
-Type "wetware dream --steps 5"
-Enter
-Sleep 5s
-
-# Scene 4: Check what resonates
-Type "wetware briefing"
-Enter
-Sleep 6s
-
-# Scene 5: Deep introspection
-Type "wetware introspect --top 5"
-Enter
 Sleep 8s
 
-# Pause at end
-Sleep 2s
+# Scene 3: Check what resonates
+Type "wetware briefing"
+Enter
+Sleep 10s
+
+# Scene 4: Deep introspection
+Type "wetware introspect --top 5"
+Enter
+Sleep 12s
+
+# Final pause
+Sleep 3s

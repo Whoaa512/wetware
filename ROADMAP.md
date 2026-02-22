@@ -21,7 +21,7 @@ Working: imprint, briefing, dream, replay, persistence, associations.
 - [x] **`wetware init` command** — scaffold ~/.config/wetware/ with empty concepts.json (add via `wetware discover`)
 - [x] **OpenClaw integration example** — skill config + heartbeat setup showing real-world agent usage
 - [x] **Browser visualization** — live gel viz (cell view + constellation view) with association network, crystal bonds, concept charges, interactive highlights, force-directed layout
-- [x] **Demo GIF/video** — briefing resonance view for the README
+- [x] **Demo GIF/video** — imprint → dream → briefing showing emergent concepts (demo.tape + demo.gif)
 - [x] GitHub repo setup (public)
 
 ---
