@@ -20,7 +20,7 @@ Working: imprint, briefing, dream, replay, persistence, associations.
 - [ ] **Tests** — smoke tests covering full lifecycle (boot → imprint → briefing → dream → save/load)
 - [ ] **`wetware init` command** — scaffold ~/.config/wetware/ with example concepts on first run
 - [ ] **OpenClaw integration example** — skill config + heartbeat setup showing real-world agent usage
-- [ ] **Browser visualization** — live gel viz (port/rewrite the HTML canvas viz from Python v1)
+- [x] **Browser visualization** — live gel viz with association network, concept charges, interactive highlights
 - [ ] **Demo GIF/video** — imprint → watch propagation → briefing for the README
 - [ ] GitHub repo setup (public)
 
