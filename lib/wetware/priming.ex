@@ -1,15 +1,46 @@
 defmodule Wetware.Priming do
   alias Wetware.Util
+
   @moduledoc """
   Disposition hint generation from current concept activation.
+
+  Each hint has:
+  - id: machine-readable key
+  - orientation: what direction to lean
+  - prompt_hint: human-readable suggestion
+  - confidence: 0.0–1.0 based on source concept charges
+  - sources: which concepts triggered the hint
+  - override_key: human can disable this hint category
+
+  Hints fire based on concept tags and charge levels.
+  Multiple hints can fire simultaneously — they compose, not compete.
   """
 
-  @kindness_tags MapSet.new(["kindness", "care", "listening", "empathy", "gentleness"])
+  # ── Tag sets for matching ────────────────────────────────────
+
+  @kindness_tags MapSet.new(["kindness", "care", "empathy", "gentleness", "listening", "support"])
   @conflict_tags MapSet.new(["conflict", "tension", "emotion:conflict", "emotion:tension"])
   @overload_tags MapSet.new(["overload", "fatigue", "bandwidth", "stress"])
 
+  @creative_tags MapSet.new(["fiction", "writing", "creative", "narrative", "story", "music",
+    "art", "sound", "poetry"])
+  @building_tags MapSet.new(["coding", "software", "engineering", "build", "architecture",
+    "debugging", "tool", "tools", "cli", "automation"])
+  @philosophy_tags MapSet.new(["consciousness", "philosophy", "phenomenology", "mind",
+    "sentience", "enactivism", "enactivist", "embodied", "constitutive", "opacity",
+    "introspection", "self-knowledge"])
+  @outward_tags MapSet.new(["twitter", "social", "posting", "satorinova", "platform",
+    "x", "threads"])
+  @relational_tags MapSet.new(["family", "personal", "relationships", "care", "kindness"])
+
+  # Charge thresholds
+  @active_threshold 0.1
+  @warm_threshold 0.01
+
+  # ── Public API ───────────────────────────────────────────────
+
   @doc """
-  Returns transparent, structured disposition hints.
+  Returns transparent, structured disposition hints based on concept activation.
   """
   @spec hints([{String.t(), map()}]) :: [map()]
   def hints(concept_states) when is_list(concept_states) do
@@ -17,7 +48,13 @@ defmodule Wetware.Priming do
 
     [
       gentleness_hint(by_name),
-      clarity_hint(by_name)
+      clarity_hint(by_name),
+      creative_mode_hint(by_name),
+      building_mode_hint(by_name),
+      cross_pollination_hint(by_name),
+      philosophical_depth_hint(by_name),
+      outward_engagement_hint(by_name),
+      relational_warmth_hint(by_name)
     ]
     |> Enum.reject(&is_nil/1)
   end
@@ -66,9 +103,28 @@ defmodule Wetware.Priming do
 
   def prompt_block(_), do: "[WETWARE_PRIMING_BEGIN]\n[WETWARE_PRIMING_END]"
 
+  @doc """
+  Format hints for human-readable display in the briefing.
+  Returns a list of formatted strings, one per hint.
+  """
+  @spec format_hints_for_display([map()]) :: [String.t()]
+  def format_hints_for_display(hints) when is_list(hints) do
+    Enum.map(hints, fn hint ->
+      _id = Map.get(hint, :id) || Map.get(hint, "id") || "?"
+      text = Map.get(hint, :prompt_hint) || Map.get(hint, "prompt_hint") || ""
+      confidence = Map.get(hint, :confidence) || Map.get(hint, "confidence") || 0.0
+      bar_len = trunc(confidence * 10)
+      bar = String.duplicate("▸", max(bar_len, 1))
+      "    #{bar} #{text}"
+    end)
+  end
+
+  # ── Hint generators ──────────────────────────────────────────
+
+  # Original: lean toward gentleness when both kindness and conflict are warm.
   defp gentleness_hint(by_name) do
-    kindness = strongest_by_tags(by_name, @kindness_tags)
-    conflict = strongest_by_tags(by_name, @conflict_tags)
+    kindness = strongest_by_tags(by_name, @kindness_tags, @warm_threshold)
+    conflict = strongest_by_tags(by_name, @conflict_tags, @warm_threshold)
 
     if kindness && conflict do
       confidence = Util.clamp((kindness.charge + conflict.charge) / 2, 0.0, 1.0)
@@ -76,7 +132,7 @@ defmodule Wetware.Priming do
       %{
         id: "lean_gentle",
         orientation: "lean_toward_gentleness",
-        prompt_hint: "Favor gentleness, listening, and de-escalation in tone.",
+        prompt_hint: "Lean toward gentleness and de-escalation.",
         confidence: Float.round(confidence, 4),
         sources: [
           %{concept: kindness.name, charge: Float.round(kindness.charge, 4)},
@@ -84,13 +140,12 @@ defmodule Wetware.Priming do
         ],
         override_key: "gentleness"
       }
-    else
-      nil
     end
   end
 
+  # Original: prefer clarity when overload is warm.
   defp clarity_hint(by_name) do
-    overload = strongest_by_tags(by_name, @overload_tags)
+    overload = strongest_by_tags(by_name, @overload_tags, @warm_threshold)
 
     if overload do
       confidence = Util.clamp(overload.charge, 0.0, 1.0)
@@ -98,27 +153,182 @@ defmodule Wetware.Priming do
       %{
         id: "be_concise",
         orientation: "increase_clarity_and_concision",
-        prompt_hint: "Prefer short, explicit steps and reduce cognitive load.",
+        prompt_hint: "Prefer short, explicit steps — reduce cognitive load.",
         confidence: Float.round(confidence, 4),
         sources: [%{concept: overload.name, charge: Float.round(overload.charge, 4)}],
         override_key: "clarity"
       }
-    else
-      nil
     end
   end
 
-  defp strongest_by_tags(by_name, wanted_tags) do
+  # Creative mode: fiction-writing, music, or creative concepts are active.
+  # Suggests creative exploration over analytical work.
+  defp creative_mode_hint(by_name) do
+    creative_concepts = all_by_tags(by_name, @creative_tags, @active_threshold)
+
+    if length(creative_concepts) >= 2 do
+      avg_charge = avg(Enum.map(creative_concepts, & &1.charge))
+      names = Enum.map(creative_concepts, & &1.name) |> Enum.take(3) |> Enum.join(", ")
+
+      %{
+        id: "creative_mode",
+        orientation: "favor_creative_exploration",
+        prompt_hint: "Creative threads are warm (#{names}) — follow the artistic pull.",
+        confidence: Float.round(Util.clamp(avg_charge, 0.0, 1.0), 4),
+        sources: Enum.map(creative_concepts, &%{concept: &1.name, charge: Float.round(&1.charge, 4)}),
+        override_key: "creative_mode"
+      }
+    end
+  end
+
+  # Building mode: coding/engineering concepts are active.
+  # Suggests building or implementing over reflecting.
+  defp building_mode_hint(by_name) do
+    building_concepts = all_by_tags(by_name, @building_tags, @active_threshold)
+
+    if length(building_concepts) >= 1 do
+      strongest = Enum.max_by(building_concepts, & &1.charge)
+
+      if strongest.charge >= 0.3 do
+        %{
+          id: "building_mode",
+          orientation: "favor_building_and_implementation",
+          prompt_hint: "Building energy is high — make something concrete.",
+          confidence: Float.round(Util.clamp(strongest.charge, 0.0, 1.0), 4),
+          sources: Enum.map(building_concepts, &%{concept: &1.name, charge: Float.round(&1.charge, 4)}),
+          override_key: "building_mode"
+        }
+      end
+    end
+  end
+
+  # Cross-pollination: concepts from very different tag clusters are simultaneously active.
+  # The most generative satoris happen when unrelated threads talk to each other.
+  defp cross_pollination_hint(by_name) do
+    clusters = [
+      {:creative, @creative_tags},
+      {:building, @building_tags},
+      {:philosophy, @philosophy_tags},
+      {:relational, @relational_tags},
+      {:outward, @outward_tags}
+    ]
+
+    active_clusters =
+      clusters
+      |> Enum.filter(fn {_label, tags} ->
+        all_by_tags(by_name, tags, @active_threshold) != []
+      end)
+      |> Enum.map(fn {label, tags} ->
+        concepts = all_by_tags(by_name, tags, @active_threshold)
+        max_charge = concepts |> Enum.map(& &1.charge) |> Enum.max()
+        {label, max_charge}
+      end)
+
+    if length(active_clusters) >= 3 do
+      cluster_names = Enum.map(active_clusters, fn {label, _} -> Atom.to_string(label) end)
+      avg_charge = avg(Enum.map(active_clusters, fn {_, c} -> c end))
+
+      %{
+        id: "cross_pollinate",
+        orientation: "seek_structural_parallels_across_threads",
+        prompt_hint: "Multiple domains active (#{Enum.join(cluster_names, ", ")}) — look for cross-pollination.",
+        confidence: Float.round(Util.clamp(avg_charge * 0.8, 0.0, 1.0), 4),
+        sources: Enum.map(active_clusters, fn {label, charge} ->
+          %{concept: Atom.to_string(label), charge: Float.round(charge, 4)}
+        end),
+        override_key: "cross_pollination"
+      }
+    end
+  end
+
+  # Philosophical depth: multiple consciousness/philosophy concepts active at once.
+  # Suggests committing to one thread rather than circling all of them.
+  defp philosophical_depth_hint(by_name) do
+    philo_concepts = all_by_tags(by_name, @philosophy_tags, @active_threshold)
+
+    if length(philo_concepts) >= 3 do
+      avg_charge = avg(Enum.map(philo_concepts, & &1.charge))
+
+      %{
+        id: "go_deep",
+        orientation: "commit_to_one_philosophical_thread",
+        prompt_hint: "#{length(philo_concepts)} philosophical threads active — pick one and go deep rather than circling.",
+        confidence: Float.round(Util.clamp(avg_charge, 0.0, 1.0), 4),
+        sources: Enum.map(philo_concepts, &%{concept: &1.name, charge: Float.round(&1.charge, 4)}),
+        override_key: "philosophical_depth"
+      }
+    end
+  end
+
+  # Outward engagement: twitter/satorinova concepts active.
+  # Suggests deploying, publishing, or engaging over producing more internal work.
+  defp outward_engagement_hint(by_name) do
+    outward_concepts = all_by_tags(by_name, @outward_tags, @active_threshold)
+
+    if length(outward_concepts) >= 1 do
+      avg_charge = avg(Enum.map(outward_concepts, & &1.charge))
+
+      if avg_charge >= 0.2 do
+        %{
+          id: "look_outward",
+          orientation: "favor_deployment_and_engagement",
+          prompt_hint: "Outward threads are warm — consider deploying, publishing, or engaging.",
+          confidence: Float.round(Util.clamp(avg_charge, 0.0, 1.0), 4),
+          sources: Enum.map(outward_concepts, &%{concept: &1.name, charge: Float.round(&1.charge, 4)}),
+          override_key: "outward_engagement"
+        }
+      end
+    end
+  end
+
+  # Relational warmth: family/personal concepts warm.
+  # Modulates toward care, personal connection, and warmth in tone.
+  defp relational_warmth_hint(by_name) do
+    relational_concepts = all_by_tags(by_name, @relational_tags, @warm_threshold)
+
+    # Only fire if at least 2 relational concepts are warm (not just one stray activation)
+    if length(relational_concepts) >= 2 do
+      avg_charge = avg(Enum.map(relational_concepts, & &1.charge))
+
+      if avg_charge >= 0.03 do
+        %{
+          id: "warmth",
+          orientation: "lean_toward_personal_warmth",
+          prompt_hint: "Relational threads are warm — lean toward personal connection and care.",
+          confidence: Float.round(Util.clamp(avg_charge * 2, 0.0, 1.0), 4),
+          sources: Enum.map(relational_concepts, &%{concept: &1.name, charge: Float.round(&1.charge, 4)}),
+          override_key: "relational_warmth"
+        }
+      end
+    end
+  end
+
+  # ── Helpers ──────────────────────────────────────────────────
+
+  defp strongest_by_tags(by_name, wanted_tags, min_charge) do
     by_name
     |> Enum.map(fn {name, data} ->
       tags = data.tags || []
-
-      if not MapSet.disjoint?(MapSet.new(tags), wanted_tags),
+      if not MapSet.disjoint?(MapSet.new(tags), wanted_tags) and data.charge >= min_charge,
         do: %{name: name, charge: data.charge},
         else: nil
     end)
     |> Enum.reject(&is_nil/1)
     |> Enum.max_by(& &1.charge, fn -> nil end)
   end
-end
 
+  defp all_by_tags(by_name, wanted_tags, min_charge) do
+    by_name
+    |> Enum.map(fn {name, data} ->
+      tags = data.tags || []
+      if not MapSet.disjoint?(MapSet.new(tags), wanted_tags) and data.charge >= min_charge,
+        do: %{name: name, charge: data.charge},
+        else: nil
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.sort_by(& &1.charge, :desc)
+  end
+
+  defp avg([]), do: 0.0
+  defp avg(values), do: Enum.sum(values) / length(values)
+end

@@ -299,6 +299,23 @@ defmodule Wetware.Resonance do
     end
 
     IO.puts("  DORMANT: #{length(b.dormant)} concepts")
+
+    if b.disposition_hints != [] do
+      IO.puts("")
+      IO.puts("  DISPOSITION:")
+
+      Enum.each(b.disposition_hints, fn hint ->
+        id = Map.get(hint, :id) || Map.get(hint, "id")
+        text = Map.get(hint, :prompt_hint) || Map.get(hint, "prompt_hint")
+        confidence = Map.get(hint, :confidence) || Map.get(hint, "confidence") || 0.0
+        conf_bar = String.duplicate("▮", trunc(confidence * 10))
+        conf_pad = String.duplicate("▯", 10 - trunc(confidence * 10))
+        IO.puts("    #{conf_bar}#{conf_pad}  #{id}")
+        IO.puts("    #{IO.ANSI.faint()}#{text}#{IO.ANSI.reset()}")
+        IO.puts("")
+      end)
+    end
+
     IO.puts("===========================================")
     IO.puts("")
   end

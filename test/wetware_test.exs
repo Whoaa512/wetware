@@ -520,6 +520,60 @@ defmodule WetwareTest do
              end)
     end
 
+    test "creative_mode priming appears when 2+ creative concepts are active" do
+      art1 = unique_name("creative-a")
+      art2 = unique_name("creative-b")
+
+      _ = register_temp_concept(art1, 410, 410, 2, ["fiction", "creative"])
+      _ = register_temp_concept(art2, 430, 410, 2, ["music", "art", "creative"])
+
+      assert :ok = Resonance.imprint([art1, art2], steps: 3, strength: 0.9)
+      payload = Resonance.priming_payload()
+
+      assert Enum.any?(payload.disposition_hints, fn hint ->
+               (hint[:id] || hint["id"]) == "creative_mode"
+             end)
+    end
+
+    test "building_mode priming appears when build-tagged concept is strong" do
+      builder = unique_name("builder")
+      _ = register_temp_concept(builder, 450, 450, 2, ["coding", "build", "software"])
+
+      assert :ok = Resonance.imprint([builder], steps: 5, strength: 1.0)
+      charge = Concept.charge(builder)
+      assert charge > 0.3
+
+      payload = Resonance.priming_payload()
+
+      assert Enum.any?(payload.disposition_hints, fn hint ->
+               (hint[:id] || hint["id"]) == "building_mode"
+             end)
+    end
+
+    test "cross_pollination fires when 3+ domain clusters are active" do
+      # The cluster-based cross-pollination fires when concepts from 3+ different
+      # tag domains (creative, building, philosophy, relational, outward) are active.
+      creative_c = unique_name("xpoll-creative")
+      building_c = unique_name("xpoll-building")
+      philo_c = unique_name("xpoll-philo")
+
+      _ = register_temp_concept(creative_c, 470, 470, 2, ["fiction", "creative"])
+      _ = register_temp_concept(building_c, 480, 480, 2, ["coding", "build"])
+      _ = register_temp_concept(philo_c, 490, 490, 2, ["philosophy", "consciousness"])
+
+      assert :ok = Resonance.imprint([creative_c, building_c, philo_c], steps: 3, strength: 1.0)
+
+      briefing = Resonance.briefing()
+
+      cross_hint =
+        Enum.find(briefing.disposition_hints, fn hint ->
+          (hint[:id] || hint["id"]) == "cross_pollinate"
+        end)
+
+      assert cross_hint != nil
+      assert String.contains?(cross_hint.prompt_hint, "cross-pollination")
+    end
+
     test "disabled priming override removes hint from effective payload" do
       conflict = unique_name("conflict")
       care = unique_name("care")
