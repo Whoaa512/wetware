@@ -67,9 +67,12 @@ defmodule Wetware.Persistence do
         |> Map.new()
       end
 
+    mood_data = Util.safe_exit(fn -> Wetware.Mood.export() end, %{})
+
     state = %{
       "version" => "elixir-v3-sparse",
       "step_count" => step_count,
+      "mood" => mood_data,
       "params" => %{
         "propagation_rate" => p.propagation_rate,
         "charge_decay" => p.charge_decay,
@@ -211,6 +214,13 @@ defmodule Wetware.Persistence do
     case state["associations"] do
       nil -> :ok
       assoc_data -> Wetware.Associations.import(assoc_data)
+    end
+
+    # Restore mood state
+    case state["mood"] do
+      nil -> :ok
+      mood_data when is_map(mood_data) -> Util.safe_exit(fn -> Wetware.Mood.restore(mood_data) end, :ok)
+      _ -> :ok
     end
 
     :ok

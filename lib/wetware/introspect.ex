@@ -24,7 +24,8 @@ defmodule Wetware.Introspect do
       neighbors: spatial_neighbors(concepts),
       dormancy: dormancy_profile(concepts),
       topology: topology_summary(),
-      emotional_weather: emotional_weather(concepts)
+      emotional_weather: emotional_weather(concepts),
+      mood: mood_report()
     }
   end
 
@@ -212,6 +213,25 @@ defmodule Wetware.Introspect do
     )
 
     IO.puts("  #{t.total_crystal_bonds} crystallized bonds")
+    IO.puts("")
+
+    # Mood (slow affective state)
+    mood = r.mood
+    IO.puts(IO.ANSI.bright() <> "  Mood (Endocrine)" <> IO.ANSI.reset())
+    IO.puts(IO.ANSI.faint() <> "  Slow-moving affective state — the gel's felt sense" <> IO.ANSI.reset())
+    IO.puts("  Label: #{mood.label} | Trend: #{mood.trend}")
+    IO.puts("  Valence: #{mood.valence} | Arousal: #{mood.arousal}")
+    IO.puts("  Inertia: v=#{mood.inertia.valence} a=#{mood.inertia.arousal}")
+    IO.puts("  Dream influence: valence=#{mood.dream_influence.valence} intensity=#{mood.dream_influence.intensity}")
+
+    if mood.recent_history != [] do
+      IO.puts("  Recent snapshots:")
+
+      Enum.each(mood.recent_history, fn {v, a, step} ->
+        IO.puts("    step=#{step} valence=#{v} arousal=#{a}")
+      end)
+    end
+
     IO.puts("")
 
     # Emotional weather
@@ -436,6 +456,30 @@ defmodule Wetware.Introspect do
       concepts_with_valence: concept_valences,
       strongest_positive: Enum.find(concept_valences, fn c -> c.valence > 0.05 end),
       strongest_negative: Enum.find(concept_valences, fn c -> c.valence < -0.05 end)
+    }
+  end
+
+  @doc """
+  Mood report: the gel's slow-moving affective state.
+  Includes current mood, trend, history, and dream influence.
+  """
+  @spec mood_report() :: map()
+  def mood_report do
+    state = Util.safe_exit(fn -> Wetware.Mood.current() end, %Wetware.Mood{})
+    label = Util.safe_exit(fn -> Wetware.Mood.label() end, "neutral")
+    trend = Util.safe_exit(fn -> Wetware.Mood.trend() end, :insufficient_data)
+    {dream_valence, dream_intensity} = Util.safe_exit(fn -> Wetware.Mood.dream_influence() end, {0.0, 0.8})
+    history = Util.safe_exit(fn -> Wetware.Mood.history() end, [])
+
+    %{
+      valence: Float.round(state.valence, 4),
+      arousal: Float.round(state.arousal, 4),
+      label: label,
+      trend: trend,
+      inertia: %{valence: state.valence_inertia, arousal: state.arousal_inertia},
+      dream_influence: %{valence: Float.round(dream_valence, 4), intensity: Float.round(dream_intensity, 4)},
+      history_length: length(history),
+      recent_history: Enum.take(history, 5)
     }
   end
 

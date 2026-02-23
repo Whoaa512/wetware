@@ -55,7 +55,8 @@ defmodule Wetware.Priming do
       philosophical_depth_hint(by_name),
       outward_engagement_hint(by_name),
       relational_warmth_hint(by_name),
-      emotional_weather_hint(by_name)
+      emotional_weather_hint(by_name),
+      mood_hint()
     ]
     |> Enum.reject(&is_nil/1)
   end
@@ -372,6 +373,72 @@ defmodule Wetware.Priming do
           }
         end
       end
+    end
+  end
+
+  # Mood-based hint: uses the slow-moving affective state rather than instant weather.
+  # The mood integrates over many steps, so this reflects sustained emotional patterns.
+  defp mood_hint do
+    state = Util.safe_exit(fn -> Wetware.Mood.current() end, %Wetware.Mood{})
+    trend = Util.safe_exit(fn -> Wetware.Mood.trend() end, :insufficient_data)
+
+    valence = state.valence
+    arousal = state.arousal
+
+    # Only fire if mood is sufficiently non-neutral
+    cond do
+      valence > 0.15 and arousal > 0.3 ->
+        %{
+          id: "mood_energized",
+          orientation: "ride_positive_momentum",
+          prompt_hint: "Sustained positive energy — the gel's been warm. Trust the direction.",
+          confidence: Float.round(Util.clamp(valence * arousal * 2, 0.0, 1.0), 4),
+          sources: [%{mood_valence: Float.round(valence, 4), mood_arousal: Float.round(arousal, 4), trend: trend}],
+          override_key: "mood"
+        }
+
+      valence < -0.15 and arousal > 0.3 ->
+        %{
+          id: "mood_tense",
+          orientation: "acknowledge_tension_before_acting",
+          prompt_hint: "Sustained tension in the substrate — name it before pushing through.",
+          confidence: Float.round(Util.clamp(abs(valence) * arousal * 2, 0.0, 1.0), 4),
+          sources: [%{mood_valence: Float.round(valence, 4), mood_arousal: Float.round(arousal, 4), trend: trend}],
+          override_key: "mood"
+        }
+
+      valence > 0.1 and arousal <= 0.2 ->
+        %{
+          id: "mood_serene",
+          orientation: "favor_depth_over_breadth",
+          prompt_hint: "Quiet contentment — good conditions for deep, unhurried work.",
+          confidence: Float.round(Util.clamp(valence, 0.0, 1.0), 4),
+          sources: [%{mood_valence: Float.round(valence, 4), mood_arousal: Float.round(arousal, 4), trend: trend}],
+          override_key: "mood"
+        }
+
+      valence < -0.1 and arousal <= 0.2 ->
+        %{
+          id: "mood_depleted",
+          orientation: "tend_to_basics_first",
+          prompt_hint: "Low energy, mild unease — tend to what's simple and grounding before complexity.",
+          confidence: Float.round(Util.clamp(abs(valence), 0.0, 1.0), 4),
+          sources: [%{mood_valence: Float.round(valence, 4), mood_arousal: Float.round(arousal, 4), trend: trend}],
+          override_key: "mood"
+        }
+
+      trend == :volatile ->
+        %{
+          id: "mood_volatile",
+          orientation: "pause_and_settle",
+          prompt_hint: "Emotional state has been shifting rapidly — let things settle before big moves.",
+          confidence: 0.4,
+          sources: [%{mood_valence: Float.round(valence, 4), mood_arousal: Float.round(arousal, 4), trend: trend}],
+          override_key: "mood"
+        }
+
+      true ->
+        nil
     end
   end
 

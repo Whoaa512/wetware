@@ -138,6 +138,11 @@ defmodule Wetware.Resonance do
     # Compute overall emotional weather from active concepts
     emotional_weather = compute_emotional_weather(active)
 
+    # Get the slow-moving mood state
+    mood_state = Util.safe_exit(fn -> Wetware.Mood.current() end, %Wetware.Mood{})
+    mood_label = Util.safe_exit(fn -> Wetware.Mood.label() end, "neutral")
+    mood_trend = Util.safe_exit(fn -> Wetware.Mood.trend() end, :insufficient_data)
+
     %{
       step_count: Gel.step_count(),
       total_concepts: length(concepts),
@@ -145,7 +150,13 @@ defmodule Wetware.Resonance do
       warm: warm,
       dormant: dormant,
       disposition_hints: disposition_hints,
-      emotional_weather: emotional_weather
+      emotional_weather: emotional_weather,
+      mood: %{
+        valence: Float.round(mood_state.valence, 4),
+        arousal: Float.round(mood_state.arousal, 4),
+        label: mood_label,
+        trend: mood_trend
+      }
     }
   end
 
@@ -196,11 +207,21 @@ defmodule Wetware.Resonance do
 
     b = Gel.bounds()
 
+    # Dreams carry the current mood's emotional coloring
+    {dream_valence, dream_intensity_mult} = Wetware.Mood.dream_influence()
+    effective_intensity = intensity * dream_intensity_mult
+
     Enum.each(1..steps, fn _ ->
       x = rand_between(b.min_x - 2, b.max_x + 2)
       y = rand_between(b.min_y - 2, b.max_y + 2)
       r = :rand.uniform(3) + 1
-      Gel.stimulate_region(x, y, r, intensity)
+      Gel.stimulate_region(x, y, r, effective_intensity)
+
+      # Color dream stimulation with mood valence
+      if abs(dream_valence) > 0.01 do
+        stimulate_region_valence(x, y, r, dream_valence * effective_intensity)
+      end
+
       Gel.step()
     end)
 
@@ -311,6 +332,9 @@ defmodule Wetware.Resonance do
         else: maybe_seed_dormancy(name, step_count)
     end)
 
+    # Tick the mood — slow affective state samples the emotional landscape
+    Wetware.Mood.tick(step_count)
+
     :ok
   end
 
@@ -323,12 +347,22 @@ defmodule Wetware.Resonance do
     IO.puts("===========================================")
     IO.puts("  Step: #{b.step_count}  |  Concepts: #{b.total_concepts}")
 
-    # Show emotional weather if non-neutral
+    # Show mood (slow-moving affective state)
+    mood = b.mood
+
+    if mood.label != "neutral" do
+      mood_icon = mood_valence_icon(mood.valence, mood.arousal)
+      trend_str = mood_trend_str(mood.trend)
+      IO.puts("  Mood: #{mood_icon} #{mood.label}#{trend_str}")
+      IO.puts("        valence=#{mood.valence} arousal=#{mood.arousal}")
+    end
+
+    # Show emotional weather if different from mood
     weather = b.emotional_weather
 
-    if weather.label != "neutral" do
+    if weather.label != "neutral" and weather.label != mood.label do
       weather_icon = valence_icon(weather.valence)
-      IO.puts("  Mood: #{weather_icon} #{weather.label} (valence=#{weather.valence}, intensity=#{weather.intensity})")
+      IO.puts("  Weather: #{weather_icon} #{weather.label} (instant valence=#{weather.valence})")
     end
 
     IO.puts("")
@@ -386,8 +420,41 @@ defmodule Wetware.Resonance do
   defp valence_icon(v) when v < -0.1, do: "◔"
   defp valence_icon(_), do: ""
 
+  defp mood_valence_icon(valence, arousal) do
+    cond do
+      valence > 0.2 and arousal > 0.4 -> "🔥"
+      valence > 0.2 -> "☀"
+      valence > 0.05 -> "🌤"
+      valence < -0.2 and arousal > 0.4 -> "⛈"
+      valence < -0.2 -> "🌧"
+      valence < -0.05 -> "☁"
+      arousal > 0.5 -> "⚡"
+      arousal < 0.15 -> "🌙"
+      true -> "·"
+    end
+  end
+
+  defp mood_trend_str(:rising), do: " ↗"
+  defp mood_trend_str(:falling), do: " ↘"
+  defp mood_trend_str(:volatile), do: " ↕"
+  defp mood_trend_str(:stable), do: " →"
+  defp mood_trend_str(_), do: ""
+
   defp rand_between(a, b) when a >= b, do: a
   defp rand_between(a, b), do: :rand.uniform(b - a + 1) + a - 1
+
+  defp stimulate_region_valence(cx, cy, radius, valence) do
+    r2 = radius * radius
+
+    for y <- (cy - radius)..(cy + radius),
+        x <- (cx - radius)..(cx + radius),
+        (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2 do
+      {x, y}
+    end
+    |> Enum.each(fn coord ->
+      Util.safe_exit(fn -> Wetware.Cell.stimulate_emotional(coord, 0.0, valence) end, :ok)
+    end)
+  end
 
   defp ensure_dormancy_table! do
     case :ets.whereis(@dormancy_table) do

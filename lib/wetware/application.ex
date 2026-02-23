@@ -17,7 +17,8 @@ defmodule Wetware.Application do
       Wetware.Layout.Engine,
       Wetware.Gel.Lifecycle,
       Wetware.Gel,
-      Wetware.Associations
+      Wetware.Associations,
+      Wetware.Mood
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Wetware.Supervisor)
