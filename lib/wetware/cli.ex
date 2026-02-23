@@ -2,6 +2,7 @@ defmodule Wetware.CLI do
   @moduledoc "CLI entrypoint for the wetware binary."
 
   alias Wetware.{
+    Absorb,
     AutoImprint,
     DataPaths,
     Discovery,
@@ -54,6 +55,7 @@ defmodule Wetware.CLI do
       ["discover" | rest] -> cmd_discover(rest)
       ["prune" | rest] -> cmd_prune(rest)
       ["auto-imprint", input | rest] -> cmd_auto_imprint(input, rest, gel_state_path)
+      ["absorb", file_path | rest] -> cmd_absorb(file_path, rest, gel_state_path)
       ["viz" | rest] -> cmd_viz(rest)
       ["serve" | rest] -> cmd_viz(rest)
       ["help" | _] -> cmd_help()
@@ -395,6 +397,57 @@ defmodule Wetware.CLI do
     end
   end
 
+  defp cmd_absorb(file_path, rest, state_path) do
+    {opts, _, _} =
+      OptionParser.parse(rest,
+        strict: [steps: :integer, strength: :float, dry_run: :boolean]
+      )
+
+    absorb_opts =
+      []
+      |> then(fn o -> if opts[:steps], do: Keyword.put(o, :steps, opts[:steps]), else: o end)
+      |> then(fn o ->
+        if opts[:strength], do: Keyword.put(o, :strength, opts[:strength]), else: o
+      end)
+      |> then(fn o ->
+        if opts[:dry_run], do: Keyword.put(o, :dry_run, opts[:dry_run]), else: o
+      end)
+
+    case Absorb.run(file_path, absorb_opts) do
+      {:ok, result} ->
+        if opts[:dry_run] do
+          IO.puts("#{IO.ANSI.cyan()}absorb dry-run:#{IO.ANSI.reset()}")
+        else
+          Resonance.save(state_path)
+          IO.puts("#{IO.ANSI.green()}absorbed#{IO.ANSI.reset()} #{result.concept_name}")
+        end
+
+        IO.puts("  concept: #{result.concept_name}")
+        IO.puts("  created: #{result.created}")
+        IO.puts("  valence: #{result.valence}")
+        IO.puts("  steps:   #{result.steps}")
+
+        if result.referenced_concepts != [] do
+          IO.puts(
+            "  referenced: #{Enum.join(result.referenced_concepts, ", ")}"
+          )
+        end
+
+        if result.cross_refs != [] do
+          IO.puts("  cross-refs: #{Enum.join(result.cross_refs, ", ")}")
+        end
+
+      {:error, :file_not_found} ->
+        IO.puts("error: file not found: #{file_path}")
+
+      {:error, :no_heading_found} ->
+        IO.puts("error: no # heading found in file (needed to extract concept name)")
+
+      {:error, reason} ->
+        IO.puts("absorb failed: #{inspect(reason)}")
+    end
+  end
+
   defp cmd_viz(rest) do
     {opts, _argv, _invalid} = OptionParser.parse(rest, strict: [port: :integer])
     port = Keyword.get(opts, :port, Viz.default_port())
@@ -429,6 +482,7 @@ defmodule Wetware.CLI do
       discover --graduate             Graduate all eligible terms
       discover --graduate <term>      Graduate one term
       auto-imprint <text_or_file>     Auto-extract concepts + valence and imprint
+      absorb <concept-file.md>        Absorb a concept file (create concept + imprint refs)
       prune --dry-run                 Show prune candidates
       prune --confirm                 Prune dormant concepts
       replay <memory_dir>             Replay history through fresh gel
