@@ -23,7 +23,8 @@ defmodule Wetware.Introspect do
       concept_crystallization: concept_crystallization(concepts),
       neighbors: spatial_neighbors(concepts),
       dormancy: dormancy_profile(concepts),
-      topology: topology_summary()
+      topology: topology_summary(),
+      emotional_weather: emotional_weather(concepts)
     }
   end
 
@@ -213,6 +214,46 @@ defmodule Wetware.Introspect do
     IO.puts("  #{t.total_crystal_bonds} crystallized bonds")
     IO.puts("")
 
+    # Emotional weather
+    ew = r.emotional_weather
+
+    if ew.non_neutral_count > 0 do
+      IO.puts(IO.ANSI.bright() <> "  Emotional Weather" <> IO.ANSI.reset())
+      IO.puts(IO.ANSI.faint() <> "  Valence landscape across concepts" <> IO.ANSI.reset())
+
+      avg_label =
+        cond do
+          ew.avg_valence > 0.2 -> "warm"
+          ew.avg_valence > 0.05 -> "mild positive"
+          ew.avg_valence < -0.2 -> "unsettled"
+          ew.avg_valence < -0.05 -> "mild tension"
+          true -> "neutral"
+        end
+
+      IO.puts("  Overall: #{avg_label} (avg valence=#{ew.avg_valence})")
+
+      ew.concepts_with_valence
+      |> Enum.filter(fn c -> abs(c.valence) > 0.05 end)
+      |> Enum.take(top_n)
+      |> Enum.each(fn c ->
+        icon =
+          cond do
+            c.valence > 0.3 -> "☀"
+            c.valence > 0.1 -> "◐"
+            c.valence < -0.3 -> "◑"
+            c.valence < -0.1 -> "◔"
+            true -> "·"
+          end
+
+        bar_width = trunc(abs(c.valence) * 20)
+        direction = if c.valence > 0, do: "▸", else: "◂"
+        bar = String.duplicate(direction, bar_width)
+        IO.puts("  #{icon} #{String.pad_trailing(c.name, 24)} #{bar} #{c.valence}")
+      end)
+
+      IO.puts("")
+    end
+
     # Associations
     IO.puts(IO.ANSI.bright() <> "  Association Network" <> IO.ANSI.reset())
     IO.puts(IO.ANSI.faint() <> "  Semantic bonds from co-activation" <> IO.ANSI.reset())
@@ -360,6 +401,44 @@ defmodule Wetware.Introspect do
     |> Enum.sort_by(&(-&1.crystal_ratio))
   end
 
+  @doc """
+  Emotional weather: valence landscape across concepts.
+  Shows which concepts carry positive or negative emotional charge,
+  and the overall mood of the gel.
+  """
+  @spec emotional_weather([String.t()]) :: map()
+  def emotional_weather(concepts) do
+    concept_valences =
+      concepts
+      |> Enum.map(fn name ->
+        charge = safe_charge(name)
+        valence = safe_valence(name)
+        %{name: name, charge: Float.round(charge, 4), valence: Float.round(valence, 4)}
+      end)
+      |> Enum.filter(fn c -> c.charge > 0.01 end)
+      |> Enum.sort_by(&abs(&1.valence), :desc)
+
+    non_neutral = Enum.filter(concept_valences, fn c -> abs(c.valence) > 0.05 end)
+
+    # Charge-weighted average valence
+    {weighted_sum, total_charge} =
+      concept_valences
+      |> Enum.filter(fn c -> c.charge > 0.1 end)
+      |> Enum.reduce({0.0, 0.0}, fn c, {ws, tc} ->
+        {ws + c.valence * c.charge, tc + c.charge}
+      end)
+
+    avg_valence = if total_charge > 0, do: weighted_sum / total_charge, else: 0.0
+
+    %{
+      avg_valence: Float.round(avg_valence, 4),
+      non_neutral_count: length(non_neutral),
+      concepts_with_valence: concept_valences,
+      strongest_positive: Enum.find(concept_valences, fn c -> c.valence > 0.05 end),
+      strongest_negative: Enum.find(concept_valences, fn c -> c.valence < -0.05 end)
+    }
+  end
+
   # ── Helpers ──────────────────────────────────────────────────
 
   defp build_concept_cell_map(concepts) do
@@ -394,6 +473,10 @@ defmodule Wetware.Introspect do
 
   defp safe_charge(name) do
     Util.safe_exit(fn -> Concept.charge(name) end, 0.0)
+  end
+
+  defp safe_valence(name) do
+    Util.safe_exit(fn -> Concept.valence(name) end, 0.0)
   end
 
   defp pair_key(a, b) when a <= b, do: {a, b}

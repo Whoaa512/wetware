@@ -106,20 +106,27 @@ defmodule Wetware.Resonance do
     concept_states =
       Enum.map(concepts, fn name ->
         charge = Concept.charge(name)
+        valence = Concept.valence(name)
         info = Concept.info(name)
-        {name, %{charge: charge, tags: info.tags, cx: info.cx, cy: info.cy, r: info.r}}
+
+        {name,
+         %{charge: charge, valence: valence, tags: info.tags, cx: info.cx, cy: info.cy, r: info.r}}
       end)
       |> Enum.sort_by(fn {_name, %{charge: c}} -> -c end)
 
     active =
       concept_states
       |> Enum.filter(fn {_name, %{charge: c}} -> c > 0.1 end)
-      |> Enum.map(fn {name, %{charge: c}} -> {name, Float.round(c, 4)} end)
+      |> Enum.map(fn {name, %{charge: c, valence: v}} ->
+        {name, Float.round(c, 4), Float.round(v, 4)}
+      end)
 
     warm =
       concept_states
       |> Enum.filter(fn {_name, %{charge: c}} -> c > 0.01 and c <= 0.1 end)
-      |> Enum.map(fn {name, %{charge: c}} -> {name, Float.round(c, 4)} end)
+      |> Enum.map(fn {name, %{charge: c, valence: v}} ->
+        {name, Float.round(c, 4), Float.round(v, 4)}
+      end)
 
     dormant =
       concept_states
@@ -128,14 +135,54 @@ defmodule Wetware.Resonance do
 
     disposition_hints = Priming.hints(concept_states)
 
+    # Compute overall emotional weather from active concepts
+    emotional_weather = compute_emotional_weather(active)
+
     %{
       step_count: Gel.step_count(),
       total_concepts: length(concepts),
       active: active,
       warm: warm,
       dormant: dormant,
-      disposition_hints: disposition_hints
+      disposition_hints: disposition_hints,
+      emotional_weather: emotional_weather
     }
+  end
+
+  defp compute_emotional_weather(active) do
+    if active == [] do
+      %{valence: 0.0, intensity: 0.0, label: "neutral"}
+    else
+      # Charge-weighted average valence across active concepts
+      {weighted_sum, total_charge} =
+        Enum.reduce(active, {0.0, 0.0}, fn {_name, charge, valence}, {ws, tc} ->
+          {ws + valence * charge, tc + charge}
+        end)
+
+      avg_valence = if total_charge > 0, do: weighted_sum / total_charge, else: 0.0
+
+      # Emotional intensity = how much valence variance exists (tension vs. harmony)
+      valences = Enum.map(active, fn {_name, _charge, v} -> v end)
+      non_neutral = Enum.filter(valences, fn v -> abs(v) > 0.05 end)
+      intensity = if non_neutral == [], do: 0.0, else: Enum.sum(Enum.map(non_neutral, &abs/1)) / length(active)
+
+      label =
+        cond do
+          abs(avg_valence) < 0.05 and intensity < 0.05 -> "neutral"
+          avg_valence > 0.2 -> "warm"
+          avg_valence < -0.2 -> "unsettled"
+          intensity > 0.15 -> "mixed"
+          avg_valence > 0.05 -> "mild positive"
+          avg_valence < -0.05 -> "mild tension"
+          true -> "neutral"
+        end
+
+      %{
+        valence: Float.round(avg_valence, 4),
+        intensity: Float.round(intensity, 4),
+        label: label
+      }
+    end
   end
 
   def dream(opts \\ []) do
@@ -275,14 +322,24 @@ defmodule Wetware.Resonance do
     IO.puts("  Wetware - Resonance Briefing")
     IO.puts("===========================================")
     IO.puts("  Step: #{b.step_count}  |  Concepts: #{b.total_concepts}")
+
+    # Show emotional weather if non-neutral
+    weather = b.emotional_weather
+
+    if weather.label != "neutral" do
+      weather_icon = valence_icon(weather.valence)
+      IO.puts("  Mood: #{weather_icon} #{weather.label} (valence=#{weather.valence}, intensity=#{weather.intensity})")
+    end
+
     IO.puts("")
 
     if b.active != [] do
       IO.puts("  ACTIVE:")
 
-      Enum.each(b.active, fn {name, charge} ->
+      Enum.each(b.active, fn {name, charge, valence} ->
         bar = String.duplicate("#", trunc(charge * 40))
-        IO.puts("    #{String.pad_trailing(name, 25)} #{bar} #{charge}")
+        valence_str = if abs(valence) > 0.05, do: " #{valence_icon(valence)}", else: ""
+        IO.puts("    #{String.pad_trailing(name, 25)} #{bar} #{charge}#{valence_str}")
       end)
 
       IO.puts("")
@@ -291,8 +348,9 @@ defmodule Wetware.Resonance do
     if b.warm != [] do
       IO.puts("  WARM:")
 
-      Enum.each(b.warm, fn {name, charge} ->
-        IO.puts("    #{String.pad_trailing(name, 25)} #{charge}")
+      Enum.each(b.warm, fn {name, charge, valence} ->
+        valence_str = if abs(valence) > 0.05, do: " #{valence_icon(valence)}", else: ""
+        IO.puts("    #{String.pad_trailing(name, 25)} #{charge}#{valence_str}")
       end)
 
       IO.puts("")
@@ -321,6 +379,12 @@ defmodule Wetware.Resonance do
   end
 
   def concepts_path, do: DataPaths.concepts_path()
+
+  defp valence_icon(v) when v > 0.3, do: "☀"
+  defp valence_icon(v) when v > 0.1, do: "◐"
+  defp valence_icon(v) when v < -0.3, do: "◑"
+  defp valence_icon(v) when v < -0.1, do: "◔"
+  defp valence_icon(_), do: ""
 
   defp rand_between(a, b) when a >= b, do: a
   defp rand_between(a, b), do: :rand.uniform(b - a + 1) + a - 1

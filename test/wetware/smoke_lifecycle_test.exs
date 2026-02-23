@@ -42,8 +42,9 @@ defmodule Wetware.SmokeLifecycleTest do
     briefing = Resonance.briefing()
     assert briefing.total_concepts >= 1
 
-    assert Enum.any?(briefing.active ++ briefing.warm, fn {concept_name, _charge} ->
-             concept_name == name
+    assert Enum.any?(briefing.active ++ briefing.warm, fn
+             {concept_name, _charge, _valence} -> concept_name == name
+             {concept_name, _charge} -> concept_name == name
            end)
 
     assert %{steps: 2, echoes: echoes} = Resonance.dream(steps: 2, intensity: 0.35)

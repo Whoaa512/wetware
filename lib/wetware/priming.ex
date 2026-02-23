@@ -54,7 +54,8 @@ defmodule Wetware.Priming do
       cross_pollination_hint(by_name),
       philosophical_depth_hint(by_name),
       outward_engagement_hint(by_name),
-      relational_warmth_hint(by_name)
+      relational_warmth_hint(by_name),
+      emotional_weather_hint(by_name)
     ]
     |> Enum.reject(&is_nil/1)
   end
@@ -299,6 +300,77 @@ defmodule Wetware.Priming do
           sources: Enum.map(relational_concepts, &%{concept: &1.name, charge: Float.round(&1.charge, 4)}),
           override_key: "relational_warmth"
         }
+      end
+    end
+  end
+
+  # Emotional weather: when active concepts carry significant valence,
+  # surface the mood as a disposition hint.
+  defp emotional_weather_hint(by_name) do
+    # Only consider active concepts with valence data
+    active_with_valence =
+      by_name
+      |> Enum.filter(fn {_name, data} ->
+        data.charge >= @active_threshold and Map.has_key?(data, :valence)
+      end)
+      |> Enum.map(fn {name, data} ->
+        %{name: name, charge: data.charge, valence: Map.get(data, :valence, 0.0)}
+      end)
+
+    non_neutral =
+      Enum.filter(active_with_valence, fn c -> abs(c.valence) > 0.05 end)
+
+    if non_neutral != [] do
+      # Charge-weighted average valence
+      {weighted_sum, total_charge} =
+        Enum.reduce(non_neutral, {0.0, 0.0}, fn c, {ws, tc} ->
+          {ws + c.valence * c.charge, tc + c.charge}
+        end)
+
+      avg_valence = if total_charge > 0, do: weighted_sum / total_charge, else: 0.0
+
+      if abs(avg_valence) > 0.05 do
+        {orientation, prompt} =
+          cond do
+            avg_valence > 0.2 ->
+              {"lean_into_positive_momentum",
+               "Emotional valence is positive — trust the energy and lean into momentum."}
+
+            avg_valence > 0.05 ->
+              {"notice_mild_warmth",
+               "Mild positive emotional color — something is going well, notice what."}
+
+            avg_valence < -0.2 ->
+              {"slow_down_tend_carefully",
+               "Emotional valence is negative — slow down, tend carefully, check in."}
+
+            avg_valence < -0.05 ->
+              {"notice_mild_tension",
+               "Mild tension in the emotional substrate — worth naming before proceeding."}
+
+            true ->
+              nil
+          end
+
+        if orientation do
+          confidence = Util.clamp(abs(avg_valence), 0.0, 1.0)
+
+          %{
+            id: "emotional_weather",
+            orientation: orientation,
+            prompt_hint: prompt,
+            confidence: Float.round(confidence, 4),
+            sources:
+              Enum.map(non_neutral, fn c ->
+                %{
+                  concept: c.name,
+                  charge: Float.round(c.charge, 4),
+                  valence: Float.round(c.valence, 4)
+                }
+              end),
+            override_key: "emotional_weather"
+          }
+        end
       end
     end
   end
