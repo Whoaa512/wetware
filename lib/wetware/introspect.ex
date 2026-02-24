@@ -953,6 +953,84 @@ defmodule Wetware.Introspect do
     Util.safe_exit(fn -> Concept.valence(name) end, 0.0)
   end
 
+  @doc """
+  Check all concepts for position drift between GenServer and Gel.
+  Returns list of concepts where positions differ.
+  """
+  @spec drift_check() :: [map()]
+  def drift_check do
+    all_concepts = Concept.list_all()
+    gel_concepts = Gel.concepts()
+
+    all_concepts
+    |> Enum.map(fn name ->
+      raw = Util.safe_exit(fn -> Concept.raw_position(name) end, nil)
+      gel = Map.get(gel_concepts, name)
+
+      case {raw, gel} do
+        {%{cx: rcx, cy: rcy, r: rr}, %{center: {gcx, gcy}, r: gr}} ->
+          dx = abs(rcx - gcx)
+          dy = abs(rcy - gcy)
+          dist = :math.sqrt(dx * dx + dy * dy)
+
+          if dx > 0 or dy > 0 or rr != gr do
+            %{
+              name: name,
+              genserver: {rcx, rcy, rr},
+              gel: {gcx, gcy, gr},
+              distance: Float.round(dist, 2),
+              radius_diff: rr - gr
+            }
+          else
+            nil
+          end
+
+        _ ->
+          nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.sort_by(& &1.distance, :desc)
+  end
+
+  @doc """
+  Print drift check results.
+  """
+  def print_drift_check do
+    drifted = drift_check()
+
+    if drifted == [] do
+      IO.puts(IO.ANSI.green() <> "✓ No position drift detected. All concepts synced." <> IO.ANSI.reset())
+    else
+      IO.puts(IO.ANSI.cyan() <> "╔══════════════════════════════════════════╗" <> IO.ANSI.reset())
+      IO.puts(IO.ANSI.cyan() <> "║  DRIFT CHECK: #{length(drifted)} concepts drifted      ║" <> IO.ANSI.reset())
+      IO.puts(IO.ANSI.cyan() <> "╚══════════════════════════════════════════╝" <> IO.ANSI.reset())
+      IO.puts("")
+
+      Enum.each(drifted, fn d ->
+        {rcx, rcy, rr} = d.genserver
+        {gcx, gcy, gr} = d.gel
+
+        severity =
+          cond do
+            d.distance > 10 -> IO.ANSI.red() <> "HIGH" <> IO.ANSI.reset()
+            d.distance > 3 -> IO.ANSI.yellow() <> "MED " <> IO.ANSI.reset()
+            true -> IO.ANSI.faint() <> "LOW " <> IO.ANSI.reset()
+          end
+
+        IO.puts("  #{severity} #{String.pad_trailing(d.name, 30)} dist=#{d.distance}")
+        IO.puts("        GenServer: (#{rcx}, #{rcy}) r=#{rr}")
+        IO.puts("        Gel:       (#{gcx}, #{gcy}) r=#{gr}")
+
+        if d.radius_diff != 0 do
+          IO.puts("        Radius diff: #{d.radius_diff}")
+        end
+
+        IO.puts("")
+      end)
+    end
+  end
+
   defp pair_key(a, b) when a <= b, do: {a, b}
   defp pair_key(a, b), do: {b, a}
 end

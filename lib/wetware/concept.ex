@@ -38,6 +38,10 @@ defmodule Wetware.Concept do
   end
   def associations(name), do: GenServer.call(via(name), :associations, 30_000)
   def info(name), do: GenServer.call(via(name), :info)
+
+  @doc "Get the GenServer's own position without merging Gel data. For drift detection."
+  def raw_position(name), do: GenServer.call(via(name), :raw_position)
+
   def children(name), do: children_of(name)
   def ancestry(name), do: ancestry_of(name)
 
@@ -103,6 +107,10 @@ defmodule Wetware.Concept do
     end)
 
     {:noreply, concept}
+  end
+
+  def handle_call(:raw_position, _from, concept) do
+    {:reply, %{cx: concept.cx, cy: concept.cy, r: concept.r}, concept}
   end
 
   @impl true

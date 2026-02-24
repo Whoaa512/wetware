@@ -114,6 +114,28 @@ defmodule Wetware.IntrospectTest do
     end
   end
 
+  describe "drift_check" do
+    test "drift_check returns list" do
+      result = Introspect.drift_check()
+      assert is_list(result)
+    end
+
+    test "print_drift_check runs without error" do
+      assert :ok == Introspect.print_drift_check()
+    end
+  end
+
+  describe "raw_position" do
+    test "Concept.raw_position returns GenServer's own position" do
+      name = hd(Wetware.Concept.list_all())
+      pos = Wetware.Concept.raw_position(name)
+      assert is_map(pos)
+      assert Map.has_key?(pos, :cx)
+      assert Map.has_key?(pos, :cy)
+      assert Map.has_key?(pos, :r)
+    end
+  end
+
   defp tmp_path(label) do
     Path.join(
       System.tmp_dir!(),

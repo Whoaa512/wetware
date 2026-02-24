@@ -291,7 +291,9 @@ defmodule Wetware.Persistence do
 
   defp sync_concept_positions(merged_concepts) do
     Enum.each(merged_concepts, fn {name, %{center: {cx, cy}, r: r}} ->
-      case Util.safe_exit(fn -> Wetware.Concept.info(name) end, nil) do
+      # Use raw_position to get the GenServer's own state, NOT info which
+      # merges Gel data (which would always match, defeating the sync).
+      case Util.safe_exit(fn -> Wetware.Concept.raw_position(name) end, nil) do
         %{cx: gcx, cy: gcy, r: gr} ->
           if gcx != cx or gcy != cy do
             Wetware.Concept.update_center(name, cx, cy)
@@ -302,7 +304,11 @@ defmodule Wetware.Persistence do
           end
 
         _ ->
-          :ok
+          # GenServer not running yet — unconditionally sync
+          Util.safe_exit(fn ->
+            Wetware.Concept.update_center(name, cx, cy)
+            Wetware.Concept.update_radius(name, r)
+          end, :ok)
       end
     end)
   end

@@ -51,6 +51,7 @@ defmodule Wetware.CLI do
       ["status" | _] -> cmd_status()
       ["concepts" | _] -> cmd_concepts()
       ["inspect", name | rest] -> cmd_inspect(name, rest)
+      ["drift-check" | _] -> cmd_drift_check()
       ["introspect" | rest] -> cmd_introspect(rest)
       ["priming" | rest] -> cmd_priming(rest)
       ["discover" | rest] -> cmd_discover(rest)
@@ -218,6 +219,10 @@ defmodule Wetware.CLI do
       top = Keyword.get(opts, :top, 10)
       Introspect.print_inspect(name, top: top)
     end
+  end
+
+  defp cmd_drift_check do
+    Introspect.print_drift_check()
   end
 
   defp cmd_introspect(rest) do
@@ -486,6 +491,7 @@ defmodule Wetware.CLI do
       briefing                        Show resonance briefing
       concepts                        List concepts and charge levels
       inspect <concept> [--top N] [--json]  Deep inspection of a single concept
+      drift-check                         Check all concepts for position drift
       introspect [--top N] [--json]     Deep self-examination of gel state
       priming [--format json]         Generate transparent priming tokens
       priming --disable <key>         Disable a priming orientation
