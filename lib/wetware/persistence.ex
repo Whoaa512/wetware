@@ -161,6 +161,12 @@ defmodule Wetware.Persistence do
 
     Gel.set_concepts(merged_concepts)
 
+    # Sync Concept GenServer positions with saved state.
+    # During boot, GenServers are created from concepts.json (original positions).
+    # The saved state may have different positions from clustering.
+    # Update GenServers so Concept.charge reads the correct region.
+    sync_concept_positions(merged_concepts)
+
     cells = state["cells"] || %{}
 
     # Restore cells selectively: concept cells and cells with significant charge
@@ -282,6 +288,24 @@ defmodule Wetware.Persistence do
   defp parse_kind("interstitial"), do: :interstitial
   defp parse_kind(atom) when is_atom(atom), do: atom
   defp parse_kind(_), do: :interstitial
+
+  defp sync_concept_positions(merged_concepts) do
+    Enum.each(merged_concepts, fn {name, %{center: {cx, cy}, r: r}} ->
+      case Util.safe_exit(fn -> Wetware.Concept.info(name) end, nil) do
+        %{cx: gcx, cy: gcy, r: gr} ->
+          if gcx != cx or gcy != cy do
+            Wetware.Concept.update_center(name, cx, cy)
+          end
+
+          if gr != r do
+            Wetware.Concept.update_radius(name, r)
+          end
+
+        _ ->
+          :ok
+      end
+    end)
+  end
 
   defp safe_concept_charge(name) do
     Util.safe_exit(fn -> Wetware.Concept.charge(name) end, 0.0)
