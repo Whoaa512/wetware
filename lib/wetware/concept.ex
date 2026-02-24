@@ -75,9 +75,13 @@ defmodule Wetware.Concept do
   @impl true
   def handle_cast({:stimulate, strength, valence}, concept) do
     cells_in_region(concept)
-    |> Enum.each(fn {x, y} ->
-      if match?([_ | _], Registry.lookup(Wetware.CellRegistry, {x, y})),
-        do: Cell.stimulate_emotional({x, y}, strength, valence)
+    |> Enum.each(fn coord ->
+      if match?([_ | _], Registry.lookup(Wetware.CellRegistry, coord)) do
+        Cell.stimulate_emotional(coord, strength, valence)
+      else
+        # Cell not live — add pending input so it gets promoted on next gel step
+        Wetware.Gel.Index.add_pending(coord, strength)
+      end
     end)
 
     {:noreply, concept}
@@ -107,10 +111,16 @@ defmodule Wetware.Concept do
     else
       total =
         cells
-        |> Enum.map(fn {x, y} ->
-          case safe_cell_state({x, y}) do
-            %{valence: v} -> v
-            _ -> 0.0
+        |> Enum.map(fn coord ->
+          case safe_cell_state(coord) do
+            %{valence: v} ->
+              v
+
+            _ ->
+              case Wetware.Gel.Index.snapshot(coord) do
+                {:ok, %{valence: v}} -> v
+                _ -> 0.0
+              end
           end
         end)
         |> Enum.sum()
@@ -192,10 +202,17 @@ defmodule Wetware.Concept do
     end
   end
 
-  defp cell_charge({x, y}) do
-    case safe_cell_state({x, y}) do
-      %{charge: c} -> c
-      _ -> 0.0
+  defp cell_charge(coord) do
+    case safe_cell_state(coord) do
+      %{charge: c} ->
+        c
+
+      _ ->
+        # Fall back to snapshot data for cells not yet promoted to live
+        case Wetware.Gel.Index.snapshot(coord) do
+          {:ok, %{charge: c}} -> c
+          _ -> 0.0
+        end
     end
   end
 
