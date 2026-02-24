@@ -50,6 +50,7 @@ defmodule Wetware.CLI do
       ["replay", memory_dir | _] -> cmd_replay(memory_dir, concepts_path, gel_state_path)
       ["status" | _] -> cmd_status()
       ["concepts" | _] -> cmd_concepts()
+      ["inspect", name | rest] -> cmd_inspect(name, rest)
       ["introspect" | rest] -> cmd_introspect(rest)
       ["priming" | rest] -> cmd_priming(rest)
       ["discover" | rest] -> cmd_discover(rest)
@@ -203,6 +204,20 @@ defmodule Wetware.CLI do
     IO.puts("  Hot cells: #{hot_cells}")
     IO.puts(IO.ANSI.cyan() <> "======================" <> IO.ANSI.reset())
     IO.puts("")
+  end
+
+  defp cmd_inspect(name, rest) do
+    {opts, _, _} = OptionParser.parse(rest, strict: [top: :integer, json: :boolean])
+
+    if opts[:json] do
+      case Introspect.inspect_concept(name) do
+        {:ok, data} -> IO.puts(Jason.encode!(data, pretty: true))
+        {:error, :not_found} -> IO.puts(Jason.encode!(%{error: "not_found", name: name}))
+      end
+    else
+      top = Keyword.get(opts, :top, 10)
+      Introspect.print_inspect(name, top: top)
+    end
   end
 
   defp cmd_introspect(rest) do
@@ -470,6 +485,7 @@ defmodule Wetware.CLI do
       init                            Set up data dir with empty concepts.json
       briefing                        Show resonance briefing
       concepts                        List concepts and charge levels
+      inspect <concept> [--top N] [--json]  Deep inspection of a single concept
       introspect [--top N] [--json]     Deep self-examination of gel state
       priming [--format json]         Generate transparent priming tokens
       priming --disable <key>         Disable a priming orientation

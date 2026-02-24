@@ -623,9 +623,12 @@ defmodule Wetware.Gel do
                    not concept_center_available?(name, new_center, r, acc_state.concepts) do
                 acc_state
               else
+                {new_cx, new_cy} = new_center
                 moved_info = Map.put(info, :center, new_center)
                 moved_concepts = Map.put(acc_state.concepts, name, moved_info)
                 moved_state = %{acc_state | concepts: moved_concepts}
+                # Notify the Concept GenServer so charge/valence reads use the new region
+                Wetware.Concept.update_center(name, new_cx, new_cy)
                 seed_concept_cells(name, moved_info, moved_state)
               end
           end
@@ -711,6 +714,8 @@ defmodule Wetware.Gel do
           else
             next_info = Map.put(info, :r, next_radius)
             next_concepts = Map.put(acc_state.concepts, name, next_info)
+            # Notify the Concept GenServer so charge/valence reads use the new radius
+            Wetware.Concept.update_radius(name, next_radius)
 
             seeded_state =
               seed_concept_cells(name, next_info, %{acc_state | concepts: next_concepts})

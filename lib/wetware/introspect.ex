@@ -483,6 +483,436 @@ defmodule Wetware.Introspect do
     }
   end
 
+  # ── Per-Concept Inspect ──────────────────────────────────────
+
+  @doc """
+  Deep inspection of a single concept. Returns all available data:
+  identity, charge/valence, cell breakdown (live vs snapshot),
+  associations, crystal bonds, spatial neighbors, internal crystallization,
+  and dormancy.
+  """
+  @spec inspect_concept(String.t()) :: {:ok, map()} | {:error, :not_found}
+  def inspect_concept(name) do
+    case safe_concept_info(name) do
+      nil ->
+        {:error, :not_found}
+
+      info ->
+        all_concepts = Concept.list_all()
+        concept_cells_map = build_concept_cell_map(all_concepts)
+
+        charge = safe_charge(name)
+        valence = safe_valence(name)
+        dormancy = safe_dormancy(name)
+        cells = safe_concept_cells(name)
+        children = safe_children(name)
+
+        # Cell breakdown: live vs snapshot
+        {live_cells, snapshot_cells, dead_cells} = classify_cells(cells)
+
+        # Cell charge distribution (serializable format)
+        cell_charges =
+          cells_with_charges(cells)
+          |> Enum.map(fn {{x, y}, charge} ->
+            %{x: x, y: y, charge: charge}
+          end)
+
+        # Associations from semantic layer (convert tuples to maps for JSON)
+        associations =
+          safe_associations(name)
+          |> Enum.map(fn {other, weight} ->
+            %{concept: other, weight: Float.round(weight, 4)}
+          end)
+
+        # Crystal bonds to other concepts
+        crystals = concept_crystal_bonds(name, cells, concept_cells_map)
+
+        # Internal crystallization
+        internal = concept_internal_crystallization(name, cells)
+
+        # Spatial neighbors (nearest concepts)
+        neighbors = concept_spatial_neighbors(name, info, all_concepts)
+
+        {:ok,
+         %{
+           name: name,
+           cx: info.cx,
+           cy: info.cy,
+           r: info.r,
+           tags: info.tags || [],
+           parent: info.parent,
+           children: children,
+           charge: Float.round(charge, 6),
+           valence: Float.round(valence, 6),
+           dormancy: %{
+             dormant_steps: dormancy.dormant_steps,
+             last_active_step: dormancy.last_active_step,
+             current_step: Gel.step_count()
+           },
+           cells: %{
+             total: length(cells),
+             live: length(live_cells),
+             snapshot: length(snapshot_cells),
+             dead: length(dead_cells),
+             charge_distribution: cell_charges
+           },
+           associations: associations,
+           crystal_bonds: crystals,
+           internal_crystallization: internal,
+           spatial_neighbors: neighbors
+         }}
+    end
+  end
+
+  @doc """
+  Print formatted inspection of a single concept.
+  """
+  @spec print_inspect(String.t(), keyword()) :: :ok
+  def print_inspect(name, opts \\ []) do
+    case inspect_concept(name) do
+      {:error, :not_found} ->
+        IO.puts("#{IO.ANSI.red()}Concept not found: #{name}#{IO.ANSI.reset()}")
+        IO.puts("")
+
+        # Suggest similar names
+        suggestions = fuzzy_match(name, Concept.list_all())
+
+        if suggestions != [] do
+          IO.puts("Did you mean?")
+
+          Enum.each(suggestions, fn s ->
+            IO.puts("  #{IO.ANSI.cyan()}#{s}#{IO.ANSI.reset()}")
+          end)
+
+          IO.puts("")
+        end
+
+        :ok
+
+      {:ok, data} ->
+        top_n = Keyword.get(opts, :top, 10)
+        print_inspect_report(data, top_n)
+        :ok
+    end
+  end
+
+  defp print_inspect_report(data, top_n) do
+    IO.puts("")
+    IO.puts(IO.ANSI.cyan() <> "╔══════════════════════════════════════════╗" <> IO.ANSI.reset())
+
+    title = "  INSPECT: #{data.name}"
+    padded = String.pad_trailing(title, 42)
+    IO.puts(IO.ANSI.cyan() <> "║#{padded}║" <> IO.ANSI.reset())
+    IO.puts(IO.ANSI.cyan() <> "╚══════════════════════════════════════════╝" <> IO.ANSI.reset())
+    IO.puts("")
+
+    # Identity
+    IO.puts(IO.ANSI.bright() <> "  Identity" <> IO.ANSI.reset())
+    IO.puts("  Center: (#{data.cx}, #{data.cy})  Radius: #{data.r}")
+
+    if data.tags != [] do
+      IO.puts("  Tags: #{Enum.join(data.tags, ", ")}")
+    end
+
+    if data.parent do
+      IO.puts("  Parent: #{data.parent}")
+    end
+
+    if data.children != [] do
+      IO.puts("  Children: #{Enum.join(data.children, ", ")}")
+    end
+
+    IO.puts("")
+
+    # Charge & Valence
+    IO.puts(IO.ANSI.bright() <> "  State" <> IO.ANSI.reset())
+
+    charge_bar_width = trunc(data.charge * 40)
+    charge_bar = String.duplicate("█", min(charge_bar_width, 40))
+
+    state_label =
+      cond do
+        data.charge > 0.5 -> IO.ANSI.green() <> "ACTIVE" <> IO.ANSI.reset()
+        data.charge > 0.1 -> IO.ANSI.green() <> "active" <> IO.ANSI.reset()
+        data.charge > 0.01 -> IO.ANSI.yellow() <> "warm" <> IO.ANSI.reset()
+        true -> IO.ANSI.faint() <> "dormant" <> IO.ANSI.reset()
+      end
+
+    IO.puts("  Charge:  #{charge_bar} #{data.charge}  [#{state_label}]")
+
+    valence_str =
+      cond do
+        data.valence > 0.1 -> IO.ANSI.green() <> "#{data.valence} ☀" <> IO.ANSI.reset()
+        data.valence > 0.05 -> IO.ANSI.green() <> "#{data.valence} ◐" <> IO.ANSI.reset()
+        data.valence < -0.1 -> IO.ANSI.red() <> "#{data.valence} ◑" <> IO.ANSI.reset()
+        data.valence < -0.05 -> IO.ANSI.red() <> "#{data.valence} ◔" <> IO.ANSI.reset()
+        true -> "#{data.valence}"
+      end
+
+    IO.puts("  Valence: #{valence_str}")
+    IO.puts("")
+
+    # Dormancy
+    d = data.dormancy
+    IO.puts(IO.ANSI.bright() <> "  Dormancy" <> IO.ANSI.reset())
+    IO.puts("  Steps since active: #{d.dormant_steps}")
+    IO.puts("  Last active step:   #{d.last_active_step}")
+    IO.puts("  Current step:       #{d.current_step}")
+    IO.puts("")
+
+    # Cells
+    c = data.cells
+    IO.puts(IO.ANSI.bright() <> "  Cells" <> IO.ANSI.reset())
+    IO.puts("  Total: #{c.total}  Live: #{c.live}  Snapshot: #{c.snapshot}  Dead: #{c.dead}")
+
+    if c.charge_distribution != [] do
+      {min_c, max_c, avg_c, hot_count} = charge_stats(c.charge_distribution)
+      IO.puts("  Charge: min=#{min_c} max=#{max_c} avg=#{avg_c}")
+      IO.puts("  Hot cells (>0.5): #{hot_count}/#{c.total}")
+    end
+
+    IO.puts("")
+
+    # Associations
+    IO.puts(IO.ANSI.bright() <> "  Associations" <> IO.ANSI.reset())
+
+    IO.puts(
+      IO.ANSI.faint() <> "  Semantic bonds from co-activation" <> IO.ANSI.reset()
+    )
+
+    case Enum.take(data.associations, top_n) do
+      [] ->
+        IO.puts("  (none)")
+
+      assocs ->
+        Enum.each(assocs, fn %{concept: other, weight: weight} ->
+          bar_width = trunc(weight * 30)
+          bar = String.duplicate("█", bar_width) <> String.duplicate("░", 30 - bar_width)
+          IO.puts("  #{bar} #{weight}  ↔ #{other}")
+        end)
+    end
+
+    IO.puts("")
+
+    # Crystal bonds
+    IO.puts(IO.ANSI.bright() <> "  Crystal Bonds" <> IO.ANSI.reset())
+
+    IO.puts(
+      IO.ANSI.faint() <> "  Hard-wired pathways to other concepts" <> IO.ANSI.reset()
+    )
+
+    case Enum.take(data.crystal_bonds, top_n) do
+      [] ->
+        IO.puts("  (none)")
+
+      bonds ->
+        Enum.each(bonds, fn b ->
+          IO.puts(
+            "  ⟷ #{String.pad_trailing(b.other, 24)} #{b.count} bonds, avg=#{b.avg_weight} max=#{b.max_weight}"
+          )
+        end)
+    end
+
+    IO.puts("")
+
+    # Internal crystallization
+    ic = data.internal_crystallization
+    IO.puts(IO.ANSI.bright() <> "  Internal Structure" <> IO.ANSI.reset())
+
+    IO.puts(
+      IO.ANSI.faint() <> "  Crystallization within the concept region" <> IO.ANSI.reset()
+    )
+
+    pct = trunc(ic.crystal_ratio * 100)
+    bar_width = trunc(ic.crystal_ratio * 20)
+    bar = String.duplicate("█", bar_width) <> String.duplicate("░", 20 - bar_width)
+
+    IO.puts(
+      "  #{bar} #{pct}% crystallized (#{ic.crystal_bonds}/#{ic.total_bonds} bonds, avg=#{ic.avg_crystal_weight})"
+    )
+
+    IO.puts("")
+
+    # Spatial neighbors
+    IO.puts(IO.ANSI.bright() <> "  Nearest Concepts" <> IO.ANSI.reset())
+
+    IO.puts(
+      IO.ANSI.faint() <> "  Closest neighbors in gel space" <> IO.ANSI.reset()
+    )
+
+    case Enum.take(data.spatial_neighbors, top_n) do
+      [] ->
+        IO.puts("  (none)")
+
+      neighbors ->
+        Enum.each(neighbors, fn n ->
+          overlap = if n.overlapping, do: " ⚡", else: ""
+          charge_str = if n.charge > 0.01, do: " charge=#{n.charge}", else: ""
+
+          IO.puts(
+            "  ↔ #{String.pad_trailing(n.name, 24)} dist=#{n.distance} edge=#{n.edge_distance}#{overlap}#{charge_str}"
+          )
+        end)
+    end
+
+    IO.puts("")
+  end
+
+  # ── Inspect Helpers ─────────────────────────────────────────
+
+  defp classify_cells(cells) do
+    Enum.reduce(cells, {[], [], []}, fn coord, {live, snap, dead} ->
+      case Wetware.Gel.Index.cell_pid(coord) do
+        {:ok, _pid} ->
+          {[coord | live], snap, dead}
+
+        :error ->
+          case Wetware.Gel.Index.snapshot(coord) do
+            {:ok, _} -> {live, [coord | snap], dead}
+            :error -> {live, snap, [coord | dead]}
+          end
+      end
+    end)
+  end
+
+  defp cells_with_charges(cells) do
+    Enum.map(cells, fn coord ->
+      charge =
+        case Wetware.Gel.Index.cell_pid(coord) do
+          {:ok, pid} ->
+            Util.safe_exit(fn -> Wetware.Cell.get_charge(pid) end, 0.0)
+
+          :error ->
+            case Wetware.Gel.Index.snapshot(coord) do
+              {:ok, %{charge: c}} -> c
+              _ -> 0.0
+            end
+        end
+
+      {coord, charge}
+    end)
+  end
+
+  defp charge_stats([]), do: {0.0, 0.0, 0.0, 0}
+
+  defp charge_stats(charge_list) do
+    charges = Enum.map(charge_list, fn %{charge: c} -> c end)
+    min_c = Enum.min(charges)
+    max_c = Enum.max(charges)
+    avg_c = Enum.sum(charges) / length(charges)
+    hot_count = Enum.count(charges, &(&1 > 0.5))
+    {Float.round(min_c, 4), Float.round(max_c, 4), Float.round(avg_c, 4), hot_count}
+  end
+
+  defp safe_associations(name) do
+    Util.safe_exit(fn -> Associations.get(name, 20) end, [])
+  end
+
+  defp safe_children(name) do
+    Util.safe_exit(fn -> Concept.children(name) end, [])
+  end
+
+  defp concept_crystal_bonds(name, cells, concept_cells_map) do
+    cells
+    |> Enum.flat_map(fn {x, y} = coord ->
+      case safe_cell_state(coord) do
+        %{neighbors: neighbors} ->
+          neighbors
+          |> Enum.filter(fn {_offset, neighbor_data} ->
+            Map.get(neighbor_data, :crystallized, false)
+          end)
+          |> Enum.flat_map(fn {{dx, dy}, %{weight: weight}} ->
+            target = {x + dx, y + dy}
+            target_owners = Map.get(concept_cells_map, target, [])
+
+            target_owners
+            |> Enum.reject(&(&1 == name))
+            |> Enum.map(fn other -> {other, weight} end)
+          end)
+
+        _ ->
+          []
+      end
+    end)
+    |> Enum.group_by(fn {other, _w} -> other end, fn {_other, w} -> w end)
+    |> Enum.map(fn {other, weights} ->
+      %{
+        other: other,
+        count: length(weights),
+        avg_weight: Float.round(Enum.sum(weights) / length(weights), 4),
+        max_weight: Float.round(Enum.max(weights), 4)
+      }
+    end)
+    |> Enum.sort_by(&(-&1.count))
+  end
+
+  defp concept_internal_crystallization(_name, cells) do
+    {total_bonds, crystal_bonds, _total_weight, crystal_weight} =
+      Enum.reduce(cells, {0, 0, 0.0, 0.0}, fn coord, {tb, cb, tw, cw} ->
+        case safe_cell_state(coord) do
+          %{neighbors: neighbors} ->
+            Enum.reduce(neighbors, {tb, cb, tw, cw}, fn
+              {_offset, %{weight: w, crystallized: true}}, {tb2, cb2, tw2, cw2} ->
+                {tb2 + 1, cb2 + 1, tw2 + w, cw2 + w}
+
+              {_offset, %{weight: w}}, {tb2, cb2, tw2, cw2} ->
+                {tb2 + 1, cb2, tw2 + w, cw2}
+            end)
+
+          _ ->
+            {tb, cb, tw, cw}
+        end
+      end)
+
+    %{
+      total_bonds: total_bonds,
+      crystal_bonds: crystal_bonds,
+      crystal_ratio: if(total_bonds > 0, do: Float.round(crystal_bonds / total_bonds, 4), else: 0.0),
+      avg_crystal_weight:
+        Float.round(if(crystal_bonds > 0, do: crystal_weight / crystal_bonds, else: 0.0), 4)
+    }
+  end
+
+  defp concept_spatial_neighbors(name, info, all_concepts) do
+    all_concepts
+    |> Enum.reject(&(&1 == name))
+    |> Enum.map(fn other ->
+      case safe_concept_info(other) do
+        %{cx: ox, cy: oy, r: or_val} ->
+          distance = :math.sqrt((info.cx - ox) * (info.cx - ox) + (info.cy - oy) * (info.cy - oy))
+          edge_dist = distance - info.r - or_val
+
+          %{
+            name: other,
+            distance: Float.round(distance, 2),
+            edge_distance: Float.round(edge_dist, 2),
+            overlapping: edge_dist < 0,
+            charge: Float.round(safe_charge(other), 4)
+          }
+
+        _ ->
+          nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.sort_by(& &1.distance)
+  end
+
+  defp fuzzy_match(query, candidates) do
+    query_down = String.downcase(query)
+
+    candidates
+    |> Enum.filter(fn name ->
+      name_down = String.downcase(name)
+
+      String.contains?(name_down, query_down) or
+        String.contains?(query_down, name_down) or
+        String.jaro_distance(query_down, name_down) > 0.8
+    end)
+    |> Enum.sort_by(fn name -> -String.jaro_distance(String.downcase(name), query_down) end)
+    |> Enum.take(5)
+  end
+
   # ── Helpers ──────────────────────────────────────────────────
 
   defp build_concept_cell_map(concepts) do

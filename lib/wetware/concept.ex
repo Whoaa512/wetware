@@ -26,6 +26,16 @@ defmodule Wetware.Concept do
 
   def charge(name), do: GenServer.call(via(name), :charge, 15_000)
   def valence(name), do: GenServer.call(via(name), :valence, 15_000)
+
+  @doc "Update the concept's center position (called by Gel when clustering moves it)."
+  def update_center(name, cx, cy) when is_integer(cx) and is_integer(cy) do
+    GenServer.cast(via(name), {:update_center, cx, cy})
+  end
+
+  @doc "Update the concept's radius (called by Gel when region adapts)."
+  def update_radius(name, r) when is_integer(r) and r > 0 do
+    GenServer.cast(via(name), {:update_radius, r})
+  end
   def associations(name), do: GenServer.call(via(name), :associations, 30_000)
   def info(name), do: GenServer.call(via(name), :info)
   def children(name), do: children_of(name)
@@ -73,6 +83,14 @@ defmodule Wetware.Concept do
   end
 
   @impl true
+  def handle_cast({:update_center, cx, cy}, concept) do
+    {:noreply, %{concept | cx: cx, cy: cy}}
+  end
+
+  def handle_cast({:update_radius, r}, concept) do
+    {:noreply, %{concept | r: r}}
+  end
+
   def handle_cast({:stimulate, strength, valence}, concept) do
     cells_in_region(concept)
     |> Enum.each(fn coord ->
