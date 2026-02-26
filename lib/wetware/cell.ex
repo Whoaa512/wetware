@@ -49,6 +49,25 @@ defmodule Wetware.Cell do
   def stimulate(pid, amount) when is_pid(pid), do: GenServer.cast(pid, {:stimulate, amount})
   def stimulate({x, y}, amount), do: GenServer.cast(via(x, y), {:stimulate, amount})
 
+  def set_charge(pid, charge) when is_pid(pid), do: GenServer.cast(pid, {:set_charge, charge})
+  def set_charge({x, y}, charge), do: GenServer.cast(via(x, y), {:set_charge, charge})
+
+  @doc """
+  Async blend: pull cell's charge toward `target` by `factor`.
+  Result: factor * target + (1 - factor) * current_charge.
+  No read needed — the cell blends internally. Fire-and-forget.
+  """
+  def anchor_charge(pid, target, factor) when is_pid(pid),
+    do: GenServer.cast(pid, {:anchor_charge, target, factor})
+  def anchor_charge({x, y}, target, factor),
+    do: GenServer.cast(via(x, y), {:anchor_charge, target, factor})
+
+  @doc "Blend charge toward a target: charge = factor * target + (1 - factor) * charge"
+  def blend_toward(pid, target, factor) when is_pid(pid),
+    do: GenServer.cast(pid, {:blend_toward, target, factor})
+  def blend_toward({x, y}, target, factor),
+    do: GenServer.cast(via(x, y), {:blend_toward, target, factor})
+
   def stimulate_emotional(pid, amount, valence) when is_pid(pid) do
     GenServer.cast(pid, {:stimulate, amount, valence})
   end
@@ -123,6 +142,20 @@ defmodule Wetware.Cell do
 
   def handle_cast({:stimulate, amount, valence}, state) do
     {:noreply, stimulate_state(state, amount, valence)}
+  end
+
+  def handle_cast({:set_charge, charge}, state) do
+    {:noreply, %{state | charge: Util.clamp(charge, 0.0, 1.0)}}
+  end
+
+  def handle_cast({:anchor_charge, target, factor}, state) do
+    blended = factor * target + (1.0 - factor) * state.charge
+    {:noreply, %{state | charge: Util.clamp(blended, 0.0, 1.0)}}
+  end
+
+  def handle_cast({:blend_toward, target, factor}, state) do
+    blended = factor * target + (1.0 - factor) * state.charge
+    {:noreply, %{state | charge: Util.clamp(blended, 0.0, 1.0)}}
   end
 
   @impl true
@@ -211,21 +244,48 @@ defmodule Wetware.Cell do
     p = state.params
     profile = kind_profile(state.kind)
 
+    # CFL stability clamp: prevent overshoot when total effective coupling
+    # exceeds the stability bound for explicit Euler diffusion.
+    # With 8 neighbors and crystallized weights near w_max=1.0,
+    # unclamped coupling = 8 * 1.0 * 0.12 = 0.96 — this caused the
+    # period-2 oscillation discovered in S~421.
+    #
+    # Clamped at 0.15: prevents oscillation (any value < 0.5 works) while
+    # preserving meaningful charge differentiation across dream steps.
+    # At 0.15 per step, 20 dream steps retain ~4% of initial differentiation —
+    # combined with random stimulation, this produces gentle mixing with
+    # structure rather than uniform convergence.
+    stability_max = 0.15
+    base_rate = p.propagation_rate * profile.propagation_mult
+
+    total_coupling =
+      Enum.reduce(state.neighbors, 0.0, fn {_offset, %{weight: weight}}, acc ->
+        acc + weight * base_rate
+      end)
+
+    stability_factor = if total_coupling > stability_max, do: stability_max / total_coupling, else: 1.0
+
     propagated_charge =
       Enum.reduce(state.neighbors, 0.0, fn {offset, %{weight: weight}}, acc ->
         neighbor_charge = Map.get(neighbor_charges, offset, 0.0)
 
         flow =
-          (neighbor_charge - state.charge) * weight * p.propagation_rate *
-            profile.propagation_mult
+          (neighbor_charge - state.charge) * weight * base_rate * stability_factor
 
         acc + flow
       end)
 
+    valence_total_coupling =
+      Enum.reduce(state.neighbors, 0.0, fn {_offset, %{weight: weight}}, acc ->
+        acc + weight * p.valence_propagation_rate
+      end)
+
+    valence_stability = if valence_total_coupling > 0.5, do: 0.5 / valence_total_coupling, else: 1.0
+
     propagated_valence =
       Enum.reduce(state.neighbors, 0.0, fn {offset, %{weight: weight}}, acc ->
         neighbor_valence = Map.get(neighbor_valences, offset, 0.0)
-        flow = (neighbor_valence - state.valence) * weight * p.valence_propagation_rate
+        flow = (neighbor_valence - state.valence) * weight * p.valence_propagation_rate * valence_stability
         acc + flow
       end)
 

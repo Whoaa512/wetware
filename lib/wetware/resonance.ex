@@ -199,6 +199,15 @@ defmodule Wetware.Resonance do
   def dream(opts \\ []) do
     steps = Keyword.get(opts, :steps, 20)
     intensity = Keyword.get(opts, :intensity, 0.3)
+    # Optional damping: blend factor for anchoring to pre-dream state.
+    # Default 1.0 = no damping (rely on CFL stability clamp in Cell.do_step).
+    # The period-2 oscillation that plagued earlier dreams (S~421) is now
+    # prevented at the source: Cell.do_step clamps total coupling to 0.5,
+    # ensuring each diffusion step is stable. Dreams can run undamped.
+    # Set damping < 1.0 to additionally anchor to pre-dream charges.
+    damping = Keyword.get(opts, :damping, 1.0)
+
+    pre_cell_charges = if damping < 1.0, do: Gel.get_charges(), else: %{}
 
     before_charges =
       Concept.list_all()
@@ -211,7 +220,7 @@ defmodule Wetware.Resonance do
     {dream_valence, dream_intensity_mult} = Wetware.Mood.dream_influence()
     effective_intensity = intensity * dream_intensity_mult
 
-    Enum.each(1..steps, fn _ ->
+    Enum.each(1..steps, fn _step_n ->
       x = rand_between(b.min_x - 2, b.max_x + 2)
       y = rand_between(b.min_y - 2, b.max_y + 2)
       r = :rand.uniform(3) + 1
@@ -224,6 +233,11 @@ defmodule Wetware.Resonance do
 
       Gel.step()
     end)
+
+    # Optional post-dream damping (only if damping < 1.0)
+    if damping < 1.0 and map_size(pre_cell_charges) > 0 do
+      apply_dream_damping(pre_cell_charges, damping)
+    end
 
     after_charges =
       Concept.list_all()
@@ -238,8 +252,8 @@ defmodule Wetware.Resonance do
         delta = after_c - before
         {name, Float.round(delta, 4)}
       end)
-      |> Enum.filter(fn {_name, delta} -> delta > 0.001 end)
-      |> Enum.sort_by(fn {_name, delta} -> -delta end)
+      |> Enum.filter(fn {_name, delta} -> abs(delta) > 0.001 end)
+      |> Enum.sort_by(fn {_name, delta} -> -abs(delta) end)
 
     %{steps: steps, echoes: echoes}
   end
@@ -439,6 +453,15 @@ defmodule Wetware.Resonance do
   defp mood_trend_str(:volatile), do: " ↕"
   defp mood_trend_str(:stable), do: " →"
   defp mood_trend_str(_), do: ""
+
+  defp apply_dream_damping(pre_charges, blend_factor) do
+    # Use anchor_charge: each cell blends itself toward its pre-dream value.
+    # All casts are async (fire-and-forget), bypassing Gel GenServer entirely.
+    # Result per cell: blend_factor * pre_charge + (1 - blend_factor) * current.
+    Enum.each(pre_charges, fn {coord, pre_charge} ->
+      Wetware.Cell.anchor_charge(coord, pre_charge, blend_factor)
+    end)
+  end
 
   defp rand_between(a, b) when a >= b, do: a
   defp rand_between(a, b), do: :rand.uniform(b - a + 1) + a - 1

@@ -175,9 +175,14 @@ defmodule Wetware.CLI do
   end
 
   defp cmd_dream(rest, state_path) do
-    {opts, _, _} = OptionParser.parse(rest, strict: [steps: :integer])
-    steps = Keyword.get(opts, :steps, 10)
-    Resonance.dream(steps: steps)
+    {opts, _, _} = OptionParser.parse(rest, strict: [steps: :integer, damping: :float])
+
+    dream_opts =
+      []
+      |> then(fn o -> if opts[:steps], do: Keyword.put(o, :steps, opts[:steps]), else: o end)
+      |> then(fn o -> if opts[:damping], do: Keyword.put(o, :damping, opts[:damping]), else: o end)
+
+    Resonance.dream(dream_opts)
     Resonance.save(state_path)
     IO.puts("State saved")
   end
