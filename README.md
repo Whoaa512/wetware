@@ -234,25 +234,52 @@ wetware imprint "$DISCUSSED_TOPICS" --steps 5
 
 ### OpenClaw
 
-Wetware ships with a ready-made [OpenClaw](https://openclaw.ai) skill. Copy it into your workspace and enable it:
+Wetware integrates with [OpenClaw](https://openclaw.ai) in two ways:
+
+#### Hook (recommended) — automatic context injection
+
+The `wetware-prime` hook injects resonance state into every new agent session automatically. No agent prompting needed — the gel's state appears in context at bootstrap.
 
 ```bash
-cp -R example/openclaw/skills/wetware-memory <your-workspace>/skills/
+cp -R example/openclaw/hooks/wetware-prime ~/.openclaw/hooks/
 ```
 
-Add to your `openclaw.json5`:
+Enable in your `openclaw.json`:
 
-```json5
+```json
 {
-  skills: {
-    entries: {
-      "wetware-memory": { enabled: true }
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "wetware-prime": { "enabled": true }
+      }
     }
   }
 }
 ```
 
-Your agent will now have access to the full wetware loop — briefing, imprint, dream — as part of its skill set. See [`example/openclaw/`](example/openclaw/) for details.
+See [`docs/openclaw-integration.md`](docs/openclaw-integration.md) for the full architecture (hook + cron imprint loop, state tracking, design tradeoffs).
+
+#### Skill — agent-driven CLI access
+
+For agents that want to call wetware commands directly (imprint, dream, etc.):
+
+```bash
+cp -R example/openclaw/skills/wetware-memory <your-workspace>/skills/
+```
+
+```json
+{
+  "skills": {
+    "entries": {
+      "wetware-memory": { "enabled": true }
+    }
+  }
+}
+```
+
+The skill gives your agent access to the full wetware loop. See [`example/openclaw/`](example/openclaw/) for details.
 
 ### Data Directory Structure
 
