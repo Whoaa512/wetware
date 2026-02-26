@@ -280,7 +280,7 @@ defmodule Wetware.Cell do
         acc + weight * p.valence_propagation_rate
       end)
 
-    valence_stability = if valence_total_coupling > 0.5, do: 0.5 / valence_total_coupling, else: 1.0
+    valence_stability = if valence_total_coupling > stability_max, do: stability_max / valence_total_coupling, else: 1.0
 
     propagated_valence =
       Enum.reduce(state.neighbors, 0.0, fn {offset, %{weight: weight}}, acc ->
